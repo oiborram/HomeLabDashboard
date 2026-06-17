@@ -6,6 +6,11 @@ const lisaStatusEl = document.querySelector('#lisaStatus');
 const hostListEl = document.querySelector('#hostList');
 
 let services = [];
+let latestLisa = {
+  deploying: false,
+  application: null,
+  history: []
+};
 
 async function loadDashboard() {
   const response = await fetch('/_dashboard/api', { cache: 'no-store' });
@@ -15,10 +20,22 @@ async function loadDashboard() {
 
   const data = await response.json();
   services = data.services;
+  latestLisa = data.lisa;
   renderLisa(data.lisa);
   renderHosts(data.publicHosts);
   renderSummary(data);
   renderServices();
+}
+
+async function loadLisaStatus() {
+  const response = await fetch('/_dashboard/api', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`Dashboard API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  latestLisa = data.lisa;
+  renderLisa(data.lisa);
 }
 
 function renderSummary(data) {
@@ -31,13 +48,59 @@ function renderSummary(data) {
 
 function renderLisa(lisa) {
   lisaStatusEl.classList.toggle('deploying', lisa.deploying);
+  lisaStatusEl.tabIndex = 0;
   lisaStatusEl.innerHTML = lisa.deploying
-    ? '<span class="spinner" aria-hidden="true"></span><span>Desplegando: <strong></strong></span>'
-    : '<span class="status-dot" aria-hidden="true"></span><span>Lisa en reposo</span>';
+    ? '<span class="spinner" aria-hidden="true"></span><span>Desplegando: <strong></strong></span><div class="lisa-history" role="tooltip"></div>'
+    : '<span class="status-dot" aria-hidden="true"></span><span>Lisa en reposo</span><div class="lisa-history" role="tooltip"></div>';
 
   if (lisa.deploying) {
     lisaStatusEl.querySelector('strong').textContent = lisa.application;
   }
+
+  renderLisaHistory(lisa.history ?? []);
+}
+
+function renderLisaHistory(history) {
+  const tooltip = lisaStatusEl.querySelector('.lisa-history');
+  tooltip.replaceChildren();
+
+  const title = document.createElement('p');
+  title.className = 'history-title';
+  title.textContent = 'Últimos despliegues';
+  tooltip.append(title);
+
+  if (history.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'history-empty';
+    empty.textContent = 'Sin eventos recientes';
+    tooltip.append(empty);
+    return;
+  }
+
+  const list = document.createElement('ol');
+  for (const event of history.slice(0, 6)) {
+    const item = document.createElement('li');
+    const time = document.createElement('time');
+    time.dateTime = event.timestamp;
+    time.textContent = formatEventTime(event.timestamp);
+    const message = document.createElement('span');
+    message.textContent = event.message;
+    item.append(time, message);
+    list.append(item);
+  }
+  tooltip.append(list);
+}
+
+function formatEventTime(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 function renderHosts(hosts) {
@@ -148,4 +211,7 @@ loadDashboard().catch(error => {
   servicesEl.innerHTML = `<p class="error">${error.message}</p>`;
 });
 
-setInterval(loadDashboard, 15000);
+setInterval(() => {
+  loadLisaStatus().catch(() => renderLisa(latestLisa));
+}, 2000);
+setInterval(loadDashboard, 30000);

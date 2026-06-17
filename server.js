@@ -10,6 +10,7 @@ const port = Number(process.env.PORT ?? 3000);
 const nginxConfigPath = process.env.NGINX_CONFIG_PATH ?? '/app/config/default.conf';
 const npmProxyHostDir = process.env.NPM_PROXY_HOST_DIR ?? '/app/npm-proxy-hosts';
 const lisaDeployingPath = process.env.LISA_DEPLOYING_PATH ?? '/app/lisa-data/deploying.txt';
+const lisaLogsPath = process.env.LISA_LOGS_PATH ?? '/app/lisa-logs';
 const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
 
 app.get('/assets/*', proxyLegacyAsset);
@@ -146,22 +147,92 @@ async function readPublicHosts() {
 }
 
 async function readLisaStatus() {
+  const history = await readLisaHistory();
+
   try {
     const appName = (await fs.readFile(lisaDeployingPath, 'utf8')).trim();
     return {
       deploying: true,
-      application: appName || 'desconocida'
+      application: appName || 'desconocida',
+      history
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
       return {
         deploying: false,
-        application: null
+        application: null,
+        history
       };
     }
 
     throw error;
   }
+}
+
+async function readLisaHistory(limit = 6) {
+  try {
+    const files = (await fs.readdir(lisaLogsPath))
+      .filter(fileName => /^worker-\d{8}\.log$/u.test(fileName))
+      .sort()
+      .reverse();
+    const events = [];
+
+    for (const file of files) {
+      const content = await fs.readFile(path.join(lisaLogsPath, file), 'utf8');
+      for (const line of content.split(/\r?\n/u).filter(Boolean)) {
+        const event = parseLisaLogLine(line);
+        if (event) {
+          events.push(event);
+        }
+
+        if (events.length >= limit) {
+          return events;
+        }
+      }
+    }
+
+    return events;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+function parseLisaLogLine(line) {
+  const match = line.match(/^(\S+)\s+(.+)$/u);
+  if (!match) {
+    return null;
+  }
+
+  const [, timestamp, message] = match;
+  const kind = message.startsWith('Deploying ')
+    ? 'deploying'
+    : message.startsWith('Deployment succeeded ')
+      ? 'success'
+      : message.startsWith('Rollback completed ')
+        ? 'rollback'
+        : null;
+
+  if (!kind) {
+    return null;
+  }
+
+  return {
+    timestamp,
+    kind,
+    message: summarizeLisaEvent(message)
+  };
+}
+
+function summarizeLisaEvent(message) {
+  return message
+    .replace(/^Deploying /u, 'Desplegando ')
+    .replace(/^Deployment succeeded for /u, 'Desplegado ')
+    .replace(/^Rollback completed for /u, 'Rollback ')
+    .replace(/\s+commit\s+/u, ' @ ');
 }
 
 function readBalancedBlock(content, openingBraceIndex) {
