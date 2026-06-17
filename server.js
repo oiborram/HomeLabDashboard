@@ -10,7 +10,9 @@ const port = Number(process.env.PORT ?? 3000);
 const nginxConfigPath = process.env.NGINX_CONFIG_PATH ?? '/app/config/default.conf';
 const npmProxyHostDir = process.env.NPM_PROXY_HOST_DIR ?? '/app/npm-proxy-hosts';
 const lisaDeployingPath = process.env.LISA_DEPLOYING_PATH ?? '/app/lisa-data/deploying.txt';
+const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
 
+app.get('/assets/*', proxyLegacyAsset);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/_dashboard/api', async (request, response) => {
@@ -58,6 +60,30 @@ export async function readServices(configPath = nginxConfigPath) {
     .filter(service => !isStaticAssetPath(service.path))
     .filter(service => !service.path.startsWith('/_dashboard'))
     .sort((left, right) => left.path.localeCompare(right.path, 'es'));
+}
+
+async function proxyLegacyAsset(request, response, next) {
+  try {
+    const upstreamUrl = new URL(request.originalUrl, legacyAssetOrigin);
+    const upstreamResponse = await fetch(upstreamUrl);
+
+    if (!upstreamResponse.ok || upstreamResponse.body === null) {
+      response.sendStatus(upstreamResponse.status);
+      return;
+    }
+
+    response.status(upstreamResponse.status);
+    for (const [header, value] of upstreamResponse.headers) {
+      if (!['connection', 'content-encoding', 'transfer-encoding'].includes(header.toLowerCase())) {
+        response.setHeader(header, value);
+      }
+    }
+
+    const buffer = Buffer.from(await upstreamResponse.arrayBuffer());
+    response.send(buffer);
+  } catch (error) {
+    next(error);
+  }
 }
 
 export function parseNginxLocations(config) {
