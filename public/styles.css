@@ -150,6 +150,38 @@ input {
   font-weight: 700;
 }
 
+.service-sections {
+  display: grid;
+  gap: 26px;
+}
+
+.service-group {
+  display: grid;
+  gap: 12px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.group-header h2 {
+  font-size: 1.25rem;
+}
+
+.group-count {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

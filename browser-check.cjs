@@ -27,6 +27,8 @@ const { chromium } = require('playwright');
       text: anchor.textContent.trim(),
       href: anchor.getAttribute('href')
     })));
+  const groups = await page.$$eval('.service-group', elements =>
+    elements.map(section => section.querySelector('h2').textContent.trim()));
   const api = await page.evaluate(async () =>
     fetch('/_dashboard/api').then(response => response.json()));
 
@@ -48,6 +50,15 @@ const { chromium } = require('playwright');
   if (!links.some(link => link.href === '/daria/')) {
     throw new Error('Daria link was not rendered.');
   }
+  if (!links.some(link => link.href === '/api/swagger')) {
+    throw new Error('API Swagger link was not rendered.');
+  }
+  if (!links.some(link => link.href === '/daria/api/swagger')) {
+    throw new Error('Ilicilabs API Swagger link was not rendered.');
+  }
+  if (!groups.includes('Ilicilabs') || !groups.includes('Otros servicios')) {
+    throw new Error(`Expected both service groups, got ${groups.join(', ')}`);
+  }
   if (filtered < 1) {
     throw new Error('Search did not keep Daria visible.');
   }
@@ -62,6 +73,7 @@ const { chromium } = require('playwright');
     cards,
     lisa,
     links,
+    groups,
     apiHosts: api.publicHosts,
     filtered,
     errors

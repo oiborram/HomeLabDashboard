@@ -24,7 +24,9 @@ async function loadDashboard() {
 function renderSummary(data) {
   const count = data.services.length;
   const plural = count === 1 ? 'servicio publicado' : 'servicios publicados';
-  summaryEl.textContent = `${count} ${plural} desde la configuración activa de Nginx.`;
+  const ilicilabs = data.services.filter(service => service.origin === 'Ilicilabs').length;
+  const others = count - ilicilabs;
+  summaryEl.textContent = `${count} ${plural}: ${ilicilabs} Ilicilabs y ${others} externos al workspace.`;
 }
 
 function renderLisa(lisa) {
@@ -52,12 +54,44 @@ function renderHosts(hosts) {
 function renderServices() {
   const query = searchEl.value.trim().toLowerCase();
   const filtered = services.filter(service =>
-    [service.name, service.path, service.kind, service.upstream]
+    [service.name, service.path, service.kind, service.origin, service.upstream]
       .filter(Boolean)
       .some(value => value.toLowerCase().includes(query)));
 
-  servicesEl.replaceChildren(...filtered.map(renderServiceCard));
+  servicesEl.replaceChildren(...renderServiceGroups(filtered));
   emptyEl.hidden = filtered.length > 0;
+}
+
+function renderServiceGroups(serviceList) {
+  const groups = [
+    ['Ilicilabs', serviceList.filter(service => service.origin === 'Ilicilabs')],
+    ['Otros servicios', serviceList.filter(service => service.origin !== 'Ilicilabs')]
+  ];
+
+  return groups
+    .filter(([, groupServices]) => groupServices.length > 0)
+    .map(([title, groupServices]) => {
+      const section = document.createElement('section');
+      section.className = 'service-group';
+
+      const header = document.createElement('div');
+      header.className = 'group-header';
+
+      const heading = document.createElement('h2');
+      heading.textContent = title;
+
+      const count = document.createElement('span');
+      count.className = 'group-count';
+      count.textContent = `${groupServices.length}`;
+
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      grid.replaceChildren(...groupServices.map(renderServiceCard));
+
+      header.append(heading, count);
+      section.append(header, grid);
+      return section;
+    });
 }
 
 function renderServiceCard(service) {
@@ -79,7 +113,7 @@ function renderServiceCard(service) {
 
   const badge = document.createElement('span');
   badge.className = 'badge';
-  badge.textContent = service.kind;
+  badge.textContent = service.kind === 'API' ? 'Swagger' : service.kind;
 
   titleRow.append(title, badge);
 
@@ -89,12 +123,13 @@ function renderServiceCard(service) {
 
   const meta = document.createElement('p');
   meta.className = 'meta';
-  meta.textContent = service.upstream ? cleanUpstream(service.upstream) : `Redirige a ${service.redirectTo}`;
+  const target = service.kind === 'API' ? `Abre ${service.url}` : cleanUpstream(service.upstream ?? service.redirectTo);
+  meta.textContent = `${service.origin} · ${target}`;
 
   const link = document.createElement('a');
   link.className = 'open-link';
   link.href = service.url;
-  link.textContent = 'Abrir';
+  link.textContent = service.kind === 'API' ? 'Swagger' : 'Abrir';
   link.setAttribute('aria-label', `Abrir ${service.name}`);
 
   content.append(titleRow, path, meta, link);

@@ -14,9 +14,11 @@ server {
         return 308 /daria/;
     }
 
+    # <lisa-managed>
     location /daria/ {
         proxy_pass http://daria:80/;
     }
+    # </lisa-managed>
 
     location / {
         proxy_pass http://homelab-dashboard:3000;
@@ -25,10 +27,10 @@ server {
 `);
 
   assert.deepEqual(
-    services.map(service => [service.path, service.kind, service.upstream, service.redirectTo]),
+    services.map(service => [service.path, service.kind, service.origin, service.upstream, service.redirectTo]),
     [
-      ['/dnd-control-panel', 'Web', 'http://dnd-control-panel:80', null],
-      ['/daria/', 'Web', 'http://daria:80/', null],
-      ['/', 'Web', 'http://homelab-dashboard:3000', null]
+      ['/dnd-control-panel', 'Web', 'Otros', 'http://dnd-control-panel:80', null],
+      ['/daria/', 'Web', 'Ilicilabs', 'http://daria:80/', null],
+      ['/', 'Web', 'Otros', 'http://homelab-dashboard:3000', null]
     ]);
 });

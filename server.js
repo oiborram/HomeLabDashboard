@@ -25,7 +25,7 @@ app.get('/_dashboard/api', async (request, response) => {
     publicHosts,
     services: services.map(service => ({
       ...service,
-      url: buildServiceUrl(request, service.path)
+      url: buildServiceUrl(request, service.path, service.kind)
     })),
     lisa
   });
@@ -55,6 +55,7 @@ export async function readServices(configPath = nginxConfigPath) {
 
   return parseNginxLocations(config)
     .filter(service => service.path !== '/')
+    .filter(service => !isStaticAssetPath(service.path))
     .filter(service => !service.path.startsWith('/_dashboard'))
     .sort((left, right) => left.path.localeCompare(right.path, 'es'));
 }
@@ -65,6 +66,7 @@ export function parseNginxLocations(config) {
   let match;
 
   while ((match = locationPattern.exec(config)) !== null) {
+    const locationStart = match.index;
     const routePath = normalizeRoutePath(match[2], Boolean(match[1]));
     if (!routePath || routePath === '/favicon.ico') {
       continue;
@@ -83,6 +85,7 @@ export function parseNginxLocations(config) {
       name: serviceName(routePath),
       path: routePath,
       kind: inferKind(routePath, proxyPass),
+      origin: inferOrigin(config, locationStart),
       upstream: proxyPass,
       redirectTo,
       source: 'nginx'
@@ -214,6 +217,24 @@ function inferKind(routePath, upstream) {
   return 'Web';
 }
 
-function buildServiceUrl(request, routePath) {
+function isStaticAssetPath(routePath) {
+  return /\.(?:avif|css|gif|ico|jpeg|jpg|js|map|otf|png|svg|ttf|webp|woff|woff2)$/i.test(routePath);
+}
+
+function inferOrigin(config, locationStart) {
+  const managedStart = config.lastIndexOf('# <lisa-managed>', locationStart);
+  const managedEnd = config.lastIndexOf('# </lisa-managed>', locationStart);
+  return managedStart > managedEnd ? 'Ilicilabs' : 'Otros';
+}
+
+function buildServiceUrl(_request, routePath, kind) {
+  if (kind === 'API') {
+    return appendPath(routePath, 'swagger');
+  }
+
   return routePath;
+}
+
+function appendPath(routePath, segment) {
+  return `${routePath.endsWith('/') ? routePath : `${routePath}/`}${segment}`;
 }
