@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HomeLab Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Ilicilabs HomeLab</p>
+          <h1>Servicios disponibles</h1>
+          <p class="summary" id="summary">Leyendo rutas publicadas...</p>
+        </div>
+        <div class="status-panel" id="lisaStatus">
+          <span class="status-dot"></span>
+          <span>Comprobando Lisa...</span>
+        </div>
+      </section>
+
+      <section class="toolbar" aria-label="Filtros">
+        <div class="search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="Filtrar servicios">
+        </div>
+        <div class="host-list" id="hostList"></div>
+      </section>
+
+      <section class="grid" id="services"></section>
+      <section class="empty" id="empty" hidden>
+        <h2>No hay servicios publicados</h2>
+        <p>Cuando Nginx tenga rutas configuradas aparecerán aquí automáticamente.</p>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
