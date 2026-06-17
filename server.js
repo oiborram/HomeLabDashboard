@@ -59,6 +59,7 @@ export async function readServices(configPath = nginxConfigPath) {
   return parseNginxLocations(config)
     .filter(service => service.path !== '/')
     .filter(service => !isStaticAssetPath(service.path))
+    .filter(service => !isTechnicalApiDocPath(service.path))
     .filter(service => !service.path.startsWith('/_dashboard'))
     .sort((left, right) => left.path.localeCompare(right.path, 'es'));
 }
@@ -318,6 +319,10 @@ function isStaticAssetPath(routePath) {
   return /\.(?:avif|css|gif|ico|jpeg|jpg|js|map|otf|png|svg|ttf|webp|woff|woff2)$/i.test(routePath);
 }
 
+function isTechnicalApiDocPath(routePath) {
+  return /\/(?:openapi|swagger)\//i.test(routePath);
+}
+
 function inferOrigin(config, locationStart) {
   const managedStart = config.lastIndexOf('# <lisa-managed>', locationStart);
   const managedEnd = config.lastIndexOf('# </lisa-managed>', locationStart);
@@ -326,7 +331,11 @@ function inferOrigin(config, locationStart) {
 
 function buildServiceUrl(_request, routePath, kind) {
   if (kind === 'API') {
-    return appendPath(routePath, 'swagger');
+    if (routePath === '/api/') {
+      return appendPath(routePath, 'swagger/index.html');
+    }
+
+    return appendPath(routePath, 'openapi/v1.json');
   }
 
   return routePath;

@@ -50,11 +50,11 @@ const { chromium } = require('playwright');
   if (!links.some(link => link.href === '/daria/')) {
     throw new Error('Daria link was not rendered.');
   }
-  if (!links.some(link => link.href === '/api/swagger')) {
+  if (!links.some(link => link.href === '/api/swagger/index.html')) {
     throw new Error('API Swagger link was not rendered.');
   }
-  if (!links.some(link => link.href === '/daria/api/swagger')) {
-    throw new Error('Ilicilabs API Swagger link was not rendered.');
+  if (!links.some(link => link.href === '/daria/api/openapi/v1.json')) {
+    throw new Error('Ilicilabs API OpenAPI link was not rendered.');
   }
   if (!groups.includes('Ilicilabs') || !groups.includes('Otros servicios')) {
     throw new Error(`Expected both service groups, got ${groups.join(', ')}`);
