@@ -6,29 +6,91 @@
     <title>HomeLab Dashboard</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
+  <body class="intro-running">
+    <div class="line-field" aria-hidden="true">
+      <span class="network-plane network-plane-a"></span>
+      <span class="network-plane network-plane-b"></span>
+      <span class="network-route network-route-a"></span>
+      <span class="network-route network-route-b"></span>
+      <span class="network-route network-route-c"></span>
+      <span class="network-route network-route-d"></span>
+      <span class="network-route network-route-e"></span>
+      <span class="network-sweep network-sweep-a"></span>
+      <span class="network-sweep network-sweep-b"></span>
+      <span class="network-rail network-rail-a"></span>
+      <span class="network-rail network-rail-b"></span>
+      <span class="network-rail network-rail-c"></span>
+      <span class="network-node network-node-a"></span>
+      <span class="network-node network-node-b"></span>
+      <span class="network-node network-node-c"></span>
+      <span class="network-node network-node-d"></span>
+      <span class="network-node network-node-e"></span>
+      <span class="network-node network-node-f"></span>
+    </div>
+    <section class="intro-sequence" aria-hidden="true">
+      <div class="intro-plane intro-plane-a"></div>
+      <div class="intro-plane intro-plane-b"></div>
+      <div class="intro-plane intro-plane-c"></div>
+      <div class="intro-title">
+        <span>Ilicilabs HomeLab</span>
+        <strong>Servicios disponibles</strong>
+      </div>
+      <div class="intro-lower">
+        <span>Dashboard operativo</span>
+        <span>Rutas publicadas</span>
+      </div>
+    </section>
+
     <main class="shell">
-      <section class="hero">
-        <div>
+      <section class="hero" aria-labelledby="pageTitle">
+        <div class="hero-copy">
           <p class="eyebrow">Ilicilabs HomeLab</p>
-          <h1>Servicios disponibles</h1>
-          <p class="summary" id="summary">Leyendo rutas publicadas...</p>
+          <h1 id="pageTitle">Servicios disponibles</h1>
         </div>
-        <div class="status-panel" id="lisaStatus">
-          <span class="status-dot"></span>
-          <span>Comprobando Lisa...</span>
+
+        <div class="status-panel lisa-mascot" id="lisaStatus">
+          <div class="lisa-bot" aria-hidden="true">
+            <span class="lisa-antenna"></span>
+            <div class="lisa-face">
+              <span class="lisa-eye lisa-eye-left"></span>
+              <span class="lisa-eye lisa-eye-right"></span>
+              <span class="lisa-cheek lisa-cheek-left"></span>
+              <span class="lisa-cheek lisa-cheek-right"></span>
+              <span class="lisa-mouth"></span>
+            </div>
+          </div>
+          <div class="lisa-copy">
+            <span class="lisa-name">Lisa</span>
+            <span class="lisa-state">Comprobando...</span>
+          </div>
         </div>
       </section>
 
-      <section class="toolbar" aria-label="Filtros">
+      <section class="ops-panel" aria-label="Resumen y filtros">
         <div class="search-wrap">
-          <span aria-hidden="true">⌕</span>
+          <span class="search-icon" aria-hidden="true"></span>
+          <label class="sr-only" for="search">Filtrar servicios</label>
           <input id="search" type="search" placeholder="Filtrar servicios">
         </div>
-        <div class="host-list" id="hostList"></div>
+
+        <div class="summary-grid" id="summary" aria-live="polite">
+          <article class="metric">
+            <span>Total</span>
+            <strong>--</strong>
+          </article>
+          <article class="metric">
+            <span>Ilicilabs</span>
+            <strong>--</strong>
+          </article>
+          <article class="metric">
+            <span>Externos</span>
+            <strong>--</strong>
+          </article>
+        </div>
+
       </section>
 
-      <section class="service-sections" id="services"></section>
+      <section class="service-sections" id="services" aria-label="Servicios publicados"></section>
       <section class="empty" id="empty" hidden>
         <h2>No hay servicios publicados</h2>
         <p>Cuando Nginx tenga rutas configuradas aparecerán aquí automáticamente.</p>

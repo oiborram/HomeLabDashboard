@@ -9,8 +9,14 @@ const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const nginxConfigPath = process.env.NGINX_CONFIG_PATH ?? '/app/config/default.conf';
 const npmProxyHostDir = process.env.NPM_PROXY_HOST_DIR ?? '/app/npm-proxy-hosts';
-const lisaDeployingPath = process.env.LISA_DEPLOYING_PATH ?? '/app/lisa-data/deploying.txt';
-const lisaLogsPath = process.env.LISA_LOGS_PATH ?? '/app/lisa-logs';
+const lisaStateFilePath =
+  process.env.LISA_STATE_FILE_PATH ??
+  process.env.Lisa__StateFilePath ??
+  '/app/lisa-data/state.json';
+const lisaActiveDeploymentPath =
+  process.env.LISA_ACTIVE_DEPLOYMENT_PATH ??
+  process.env.LISA_DEPLOYING_PATH ??
+  '/app/lisa-data/deploying.txt';
 const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
 
 app.get('/assets/*', proxyLegacyAsset);
@@ -147,93 +153,179 @@ async function readPublicHosts() {
   }
 }
 
-async function readLisaStatus() {
-  const history = await readLisaHistory();
+export async function readLisaStatus(options = {}) {
+  const stateFilePath = options.stateFilePath ?? lisaStateFilePath;
+  const activeDeploymentPath = options.activeDeploymentPath ?? lisaActiveDeploymentPath;
+  const [stateResult, activeDeployment] = await Promise.all([
+    readLisaDeploymentState(stateFilePath),
+    readActiveLisaDeployment(activeDeploymentPath)
+  ]);
+  const watcher = await readLisaWatcherControl(stateFilePath);
 
-  try {
-    const appName = (await fs.readFile(lisaDeployingPath, 'utf8')).trim();
+  if (!stateResult.available) {
     return {
-      deploying: true,
-      application: appName || 'desconocida',
-      history
+      status: 'offline',
+      available: false,
+      deploying: false,
+      application: null,
+      reason: stateResult.reason,
+      stateFilePath,
+      watcher,
+      repositories: [],
+      history: []
+    };
+  }
+
+  const repositories = normalizeLisaRepositories(stateResult.state);
+  const history = buildLisaHistory(repositories);
+  const deploying = Boolean(activeDeployment);
+
+  return {
+    status: deploying ? 'working' : 'idle',
+    available: true,
+    deploying,
+    application: activeDeployment,
+    reason: null,
+    stateFilePath,
+    watcher,
+    repositories: repositories.map(repository => ({
+      fullName: repository.fullName,
+      branch: repository.branch,
+      commitSha: repository.commitSha,
+      localPath: repository.localPath,
+      lastFetchedAtUtc: repository.lastFetchedAtUtc
+    })),
+    history
+  };
+}
+
+async function readLisaDeploymentState(stateFilePath) {
+  try {
+    const content = (await fs.readFile(stateFilePath, 'utf8')).replace(/^\uFEFF/u, '');
+    return {
+      available: true,
+      state: JSON.parse(content),
+      reason: null
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
       return {
-        deploying: false,
-        application: null,
-        history
+        available: false,
+        state: null,
+        reason: 'missing_state'
       };
     }
 
-    throw error;
+    if (error instanceof SyntaxError) {
+      return {
+        available: false,
+        state: null,
+        reason: 'invalid_state'
+      };
+    }
+
+    return {
+      available: false,
+      state: null,
+      reason: 'unreadable_state'
+    };
   }
 }
 
-async function readLisaHistory(limit = 6) {
+async function readActiveLisaDeployment(activeDeploymentPath) {
   try {
-    const files = (await fs.readdir(lisaLogsPath))
-      .filter(fileName => /^worker-\d{8}\.log$/u.test(fileName))
-      .sort()
-      .reverse();
-    const events = [];
-
-    for (const file of files) {
-      const content = await fs.readFile(path.join(lisaLogsPath, file), 'utf8');
-      for (const line of content.split(/\r?\n/u).filter(Boolean)) {
-        const event = parseLisaLogLine(line);
-        if (event) {
-          events.push(event);
-        }
-
-        if (events.length >= limit) {
-          return events;
-        }
-      }
-    }
-
-    return events;
+    const application = (await fs.readFile(activeDeploymentPath, 'utf8')).trim();
+    return application || 'despliegue activo';
   } catch (error) {
     if (error.code === 'ENOENT') {
-      return [];
+      return null;
     }
 
-    throw error;
+    return null;
   }
 }
 
-function parseLisaLogLine(line) {
-  const match = line.match(/^(\S+)\s+(.+)$/u);
-  if (!match) {
-    return null;
+async function readLisaWatcherControl(stateFilePath) {
+  const directory = path.dirname(stateFilePath);
+  const pidFilePath = path.join(directory, 'lisa-watcher.pid');
+
+  try {
+    const pidText = (await fs.readFile(pidFilePath, 'utf8')).trim();
+    const pid = Number(pidText);
+    const running = Number.isInteger(pid) && pid > 0 && isProcessRunning(pid);
+
+    return {
+      pid: Number.isInteger(pid) && pid > 0 ? pid : null,
+      running,
+      pidFilePath
+    };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        pid: null,
+        running: false,
+        pidFilePath
+      };
+    }
+
+    return {
+      pid: null,
+      running: false,
+      pidFilePath,
+      error: 'unreadable_pid'
+    };
   }
-
-  const [, timestamp, message] = match;
-  const kind = message.startsWith('Deploying ')
-    ? 'deploying'
-    : message.startsWith('Deployment succeeded ')
-      ? 'success'
-      : message.startsWith('Rollback completed ')
-        ? 'rollback'
-        : null;
-
-  if (!kind) {
-    return null;
-  }
-
-  return {
-    timestamp,
-    kind,
-    message: summarizeLisaEvent(message)
-  };
 }
 
-function summarizeLisaEvent(message) {
-  return message
-    .replace(/^Deploying /u, 'Desplegando ')
-    .replace(/^Deployment succeeded for /u, 'Desplegado ')
-    .replace(/^Rollback completed for /u, 'Rollback ')
-    .replace(/\s+commit\s+/u, ' @ ');
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+function normalizeLisaRepositories(state) {
+  const repositories = getLisaField(state, 'Repositories', 'repositories') ?? {};
+
+  return Object.entries(repositories)
+    .map(([key, repository]) => {
+      const fullName = getLisaField(repository, 'FullName', 'fullName') ?? key;
+      const commitSha = getLisaField(repository, 'CommitSha', 'commitSha') ?? '';
+      const lastFetchedAtUtc = getLisaField(repository, 'LastFetchedAtUtc', 'lastFetchedAtUtc') ?? null;
+
+      return {
+        fullName,
+        branch: getLisaField(repository, 'Branch', 'branch') ?? 'deploy',
+        commitSha,
+        localPath: getLisaField(repository, 'LocalPath', 'localPath') ?? '',
+        lastFetchedAtUtc
+      };
+    })
+    .filter(repository => repository.fullName);
+}
+
+function buildLisaHistory(repositories, limit = 6) {
+  return repositories
+    .filter(repository => repository.lastFetchedAtUtc && !Number.isNaN(new Date(repository.lastFetchedAtUtc).getTime()))
+    .sort((left, right) => new Date(right.lastFetchedAtUtc).getTime() - new Date(left.lastFetchedAtUtc).getTime())
+    .slice(0, limit)
+    .map(repository => ({
+      timestamp: repository.lastFetchedAtUtc,
+      kind: 'success',
+      repository: repository.fullName,
+      commitSha: repository.commitSha,
+      message: `Desplegado ${repository.fullName}${repository.commitSha ? ` @ ${repository.commitSha.slice(0, 7)}` : ''}`
+    }));
+}
+
+function getLisaField(source, pascalName, camelName) {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+
+  return source[pascalName] ?? source[camelName];
 }
 
 function readBalancedBlock(content, openingBraceIndex) {

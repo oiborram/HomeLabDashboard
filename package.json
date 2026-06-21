@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test test-parser.mjs test-lisa-status.mjs"
   },
   "dependencies": {
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
   }
 }
