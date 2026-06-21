@@ -478,9 +478,11 @@ input:focus-visible {
 .status-panel {
   position: relative;
   align-self: end;
-  display: flex;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
   align-items: center;
-  min-width: 244px;
+  min-width: 360px;
+  max-width: min(460px, calc(100vw - 32px));
   min-height: 102px;
   gap: 14px;
   padding: 14px;
@@ -984,16 +986,14 @@ input:focus-visible {
 }
 
 .lisa-history {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 10;
-  display: none;
-  width: min(360px, calc(100vw - 32px));
-  padding: 14px;
-  border: 1px solid rgba(203, 213, 225, .2);
-  background: rgba(3, 5, 10, .98);
-  box-shadow: 0 22px 52px rgba(0, 0, 0, .5);
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(203, 213, 225, .14);
   color: var(--ink);
   white-space: normal;
 }
@@ -1001,7 +1001,7 @@ input:focus-visible {
 .status-panel:hover .lisa-history,
 .status-panel:focus .lisa-history,
 .status-panel:focus-within .lisa-history {
-  display: block;
+  display: grid;
 }
 
 .history-title,
@@ -1024,8 +1024,8 @@ input:focus-visible {
 
 .lisa-history ol {
   display: grid;
-  gap: 10px;
-  margin: 12px 0 0;
+  gap: 8px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -1987,7 +1987,9 @@ body.intro-handoff .service-card {
 
   .status-panel {
     justify-self: start;
-    width: min(100%, 320px);
+    grid-template-columns: 58px minmax(0, 1fr);
+    width: min(100%, 380px);
+    min-width: 0;
     min-height: 82px;
     padding: 10px;
   }
@@ -2031,11 +2033,6 @@ body.intro-handoff .service-card {
 
   .lisa-state {
     max-width: 20ch;
-  }
-
-  .lisa-history {
-    left: 0;
-    right: auto;
   }
 
   .service-table {

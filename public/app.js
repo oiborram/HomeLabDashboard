@@ -279,7 +279,7 @@ function renderLisaHistory(lisa) {
   }
 
   const list = document.createElement('ol');
-  for (const event of history.slice(0, 6)) {
+  for (const event of history.slice(0, 3)) {
     const item = document.createElement('li');
     const time = document.createElement('time');
     time.dateTime = event.timestamp;
