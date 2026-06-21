@@ -32,7 +32,7 @@ const lisaExpressionClasses = [
   'is-wink-left',
   'is-wink-right',
   'is-curious',
-  'is-sleepy',
+  'is-soft-glow',
   'is-happy-hop',
   'is-listening',
   'is-laughing'
@@ -44,7 +44,7 @@ const lisaLooks = [
   { x: '0px', y: '-2px', classes: ['is-curious'], duration: 1450 },
   { x: '-2px', y: '1px', wink: 'left', classes: ['is-smiling-wide'], duration: 1150 },
   { x: '2px', y: '1px', wink: 'right', classes: ['is-smiling-wide'], duration: 1150 },
-  { x: '0px', y: '2px', classes: ['is-sleepy'], duration: 1500 },
+  { x: '0px', y: '-1px', classes: ['is-soft-glow'], duration: 1450 },
   { x: '0px', y: '-1px', classes: ['is-happy-hop', 'is-smiling-wide'], duration: 1300 },
   { x: '0px', y: '-1px', classes: ['is-laughing'], duration: 1500 }
 ];
@@ -433,10 +433,12 @@ function formatEventTime(timestamp) {
     return '';
   }
 
-  return date.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+
+  return `${day}/${month} ${hour}:${minute}`;
 }
 
 function renderServices() {

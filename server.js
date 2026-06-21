@@ -439,7 +439,7 @@ function buildServiceUrl(_request, routePath, kind) {
     return appendPath(routePath, 'openapi/v1.json');
   }
 
-  return routePath;
+  return routePath.endsWith('/') ? routePath : `${routePath}/`;
 }
 
 function appendPath(routePath, segment) {
