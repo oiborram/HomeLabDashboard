@@ -104,6 +104,12 @@ function createLisaWorkingPreview(lisa = {}) {
     available: true,
     deploying: true,
     application: 'preview-lisa',
+    deployment: {
+      application: 'preview-lisa',
+      phase: 'post-deploy-agent',
+      phaseLabel: 'Verificando con agente',
+      updatedAtUtc: new Date().toISOString()
+    },
     history: [
       {
         timestamp: new Date().toISOString(),
@@ -227,7 +233,7 @@ function renderLisa(lisa) {
 
 function lisaAriaLabel(lisa, status) {
   if (status === 'working') {
-    return `Lisa live, desplegando ${lisa.application || 'aplicación'}`;
+    return `Lisa desplegando ${lisa.deployment?.application || lisa.application || 'aplicación'}: ${lisa.deployment?.phaseLabel || 'despliegue en curso'}`;
   }
 
   if (status === 'offline') {
@@ -239,7 +245,7 @@ function lisaAriaLabel(lisa, status) {
 
 function lisaStateText(lisa, status) {
   if (status === 'working') {
-    return `Live: ${lisa.application || 'despliegue activo'}`;
+    return `Desplegando: ${lisa.deployment?.phaseLabel || lisa.application || 'despliegue activo'}`;
   }
 
   if (status === 'offline') {
@@ -283,8 +289,16 @@ function renderLisaHistory(lisa) {
     const item = document.createElement('li');
     const time = document.createElement('time');
     time.dateTime = event.timestamp;
-    time.textContent = formatEventTime(event.timestamp);
+    const formatted = formatEventParts(event.timestamp);
+    const datePart = document.createElement('span');
+    datePart.className = 'history-date';
+    datePart.textContent = formatted.date;
+    const timePart = document.createElement('span');
+    timePart.className = 'history-clock';
+    timePart.textContent = formatted.time;
+    time.append(datePart, timePart);
     const message = document.createElement('span');
+    message.className = 'history-message';
     message.textContent = event.message;
     item.append(time, message);
     list.append(item);
@@ -428,9 +442,14 @@ window.__homelabDashboard = {
 };
 
 function formatEventTime(timestamp) {
+  const parts = formatEventParts(timestamp);
+  return [parts.date, parts.time].filter(Boolean).join(' ');
+}
+
+function formatEventParts(timestamp) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {
-    return '';
+    return { date: '', time: '' };
   }
 
   const day = String(date.getDate()).padStart(2, '0');
@@ -438,7 +457,10 @@ function formatEventTime(timestamp) {
   const hour = String(date.getHours()).padStart(2, '0');
   const minute = String(date.getMinutes()).padStart(2, '0');
 
-  return `${day}/${month} ${hour}:${minute}`;
+  return {
+    date: `${day}/${month}`,
+    time: `${hour}:${minute}`
+  };
 }
 
 function renderServices() {

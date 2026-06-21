@@ -535,10 +535,12 @@ async function probeLisaWorking(page) {
       liveClass: panel?.classList.contains('is-live') ?? false,
       stateText: state?.textContent?.trim(),
       hasPulse: Boolean(pulse),
-      pulseVisible: Number(pulseStyle?.opacity ?? '0') > 0.4,
-      pulseAnimation: animations.includes('lisaWorkingDots'),
+      pulseHidden: Number(pulseStyle?.opacity ?? '1') === 0,
+      pulseAnimationRemoved: !animations.includes('lisaWorkingDots'),
       focusAnimation: animations.includes('lisaWorkingFocus'),
+      panelPulse: animations.includes('lisaDeployPanelPulse'),
       faceAnimation: faceStyle?.animationName,
+      leftEyeRadius: Number.parseFloat(leftEyeStyle?.borderTopLeftRadius ?? '0'),
       mouthWidth: Number.parseFloat(mouthStyle?.width ?? '0'),
       mouthHeight: Number.parseFloat(mouthStyle?.height ?? '0'),
       leftEyeHeight: Number.parseFloat(leftEyeStyle?.height ?? '0'),
@@ -549,11 +551,13 @@ async function probeLisaWorking(page) {
   if (
     !result.workingClass ||
     !result.liveClass ||
-    !result.stateText?.startsWith('Live:') ||
+    !result.stateText?.startsWith('Desplegando:') ||
     !result.hasPulse ||
-    !result.pulseVisible ||
-    !result.pulseAnimation ||
+    !result.pulseHidden ||
+    !result.pulseAnimationRemoved ||
     !result.focusAnimation ||
+    !result.panelPulse ||
+    result.leftEyeRadius < 8 ||
     result.mouthWidth > 40 ||
     result.mouthHeight > 14 ||
     result.leftEyeHeight < 18 ||
@@ -637,6 +641,8 @@ async function probeLisaHistoryLayer(page) {
     const panel = document.querySelector('#lisaStatus');
     const history = panel?.querySelector('.lisa-history');
     const timeText = history?.querySelector('time')?.textContent?.trim() ?? '';
+    const dateText = history?.querySelector('.history-date')?.textContent?.trim() ?? '';
+    const clockText = history?.querySelector('.history-clock')?.textContent?.trim() ?? '';
     const rect = history?.getBoundingClientRect();
     const style = history ? getComputedStyle(history) : null;
 
@@ -654,7 +660,11 @@ async function probeLisaHistoryLayer(page) {
     return {
       display: style?.display,
       timeText,
-      dateTimePattern: /^\d{2}\/\d{2} \d{2}:\d{2}$/.test(timeText),
+      dateText,
+      clockText,
+      dateTimePattern: /^\d{2}\/\d{2}\s*\d{2}:\d{2}$/.test(timeText) &&
+        /^\d{2}\/\d{2}$/.test(dateText) &&
+        /^\d{2}:\d{2}$/.test(clockText),
       visible: style?.display !== 'none' && rect.width > 0 && rect.height > 0,
       topElementIsHistory: Boolean(topElement?.closest('.lisa-history')),
       topElementClass: topElement?.className?.toString() ?? '',

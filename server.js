@@ -18,6 +18,10 @@ const lisaActiveDeploymentPath =
   process.env.LISA_ACTIVE_DEPLOYMENT_PATH ??
   process.env.LISA_DEPLOYING_PATH ??
   '/app/lisa-data/deploying.txt';
+const lisaDeploymentStatusPath =
+  process.env.LISA_DEPLOYMENT_STATUS_PATH ??
+  process.env.Lisa__DeploymentStatusPath ??
+  '/app/lisa-data/deployment-status.json';
 const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
 
 app.get('/assets/*', proxyLegacyAsset);
@@ -165,9 +169,11 @@ async function readPublicHosts() {
 export async function readLisaStatus(options = {}) {
   const stateFilePath = options.stateFilePath ?? lisaStateFilePath;
   const activeDeploymentPath = options.activeDeploymentPath ?? lisaActiveDeploymentPath;
-  const [stateResult, activeDeployment] = await Promise.all([
+  const deploymentStatusPath = options.deploymentStatusPath ?? lisaDeploymentStatusPath;
+  const [stateResult, activeDeployment, activeProgress] = await Promise.all([
     readLisaDeploymentState(stateFilePath),
-    readActiveLisaDeployment(activeDeploymentPath)
+    readActiveLisaDeployment(activeDeploymentPath),
+    readLisaDeploymentProgress(deploymentStatusPath)
   ]);
   const watcher = await readLisaWatcherControl(stateFilePath);
 
@@ -179,6 +185,7 @@ export async function readLisaStatus(options = {}) {
       application: null,
       reason: stateResult.reason,
       stateFilePath,
+      deploymentStatusPath,
       watcher,
       repositories: [],
       history: []
@@ -187,15 +194,18 @@ export async function readLisaStatus(options = {}) {
 
   const repositories = normalizeLisaRepositories(stateResult.state);
   const history = buildLisaHistory(repositories);
-  const deploying = Boolean(activeDeployment);
+  const deployment = normalizeActiveDeployment(activeDeployment, activeProgress);
+  const deploying = Boolean(deployment);
 
   return {
     status: deploying ? 'working' : 'idle',
     available: true,
     deploying,
-    application: activeDeployment,
+    application: deployment?.application ?? null,
+    deployment,
     reason: null,
     stateFilePath,
+    deploymentStatusPath,
     watcher,
     repositories: repositories.map(repository => ({
       fullName: repository.fullName,
@@ -252,6 +262,42 @@ async function readActiveLisaDeployment(activeDeploymentPath) {
 
     return null;
   }
+}
+
+async function readLisaDeploymentProgress(deploymentStatusPath) {
+  try {
+    const content = (await fs.readFile(deploymentStatusPath, 'utf8')).replace(/^\uFEFF/u, '');
+    return JSON.parse(content);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) {
+      return null;
+    }
+
+    return null;
+  }
+}
+
+function normalizeActiveDeployment(activeDeployment, progress) {
+  if (!activeDeployment && !progress) {
+    return null;
+  }
+
+  const application = getLisaField(progress, 'Application', 'application') ?? activeDeployment ?? 'despliegue activo';
+  const phase = getLisaField(progress, 'Phase', 'phase') ?? 'deploying';
+  const phaseLabel = getLisaField(progress, 'PhaseLabel', 'phaseLabel') ?? 'Despliegue en curso';
+
+  return {
+    application,
+    repository: getLisaField(progress, 'Repository', 'repository') ?? null,
+    commitSha: getLisaField(progress, 'CommitSha', 'commitSha') ?? null,
+    phase,
+    phaseLabel,
+    startedAtUtc: getLisaField(progress, 'StartedAtUtc', 'startedAtUtc') ?? null,
+    updatedAtUtc: getLisaField(progress, 'UpdatedAtUtc', 'updatedAtUtc') ?? null,
+    route: getLisaField(progress, 'Route', 'route') ?? null,
+    details: getLisaField(progress, 'Details', 'details') ?? null,
+    artifacts: getLisaField(progress, 'Artifacts', 'artifacts') ?? null
+  };
 }
 
 async function readLisaWatcherControl(stateFilePath) {

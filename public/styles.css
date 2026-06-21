@@ -112,18 +112,18 @@ body::before {
 }
 
 .network-plane-a {
-  left: -7vw;
+  left: 2vw;
   top: 18vh;
-  transform: rotateX(60deg) rotateZ(-17deg) translate3d(0, 0, -80px);
+  transform: translate3d(0, 0, -80px);
 }
 
 .network-plane-b {
-  right: -10vw;
+  right: 2vw;
   bottom: 2vh;
-  width: 50vw;
+  width: 36vw;
   height: 34vh;
   opacity: .22;
-  transform: rotateX(58deg) rotateZ(14deg) translate3d(0, 0, -120px);
+  transform: translate3d(0, 0, -120px);
   animation-delay: -7s;
 }
 
@@ -275,8 +275,8 @@ body::before {
 }
 
 .network-rail {
-  left: -12vw;
-  width: 124vw;
+  left: 13vw;
+  width: 74vw;
   height: 1px;
   background:
     linear-gradient(90deg, transparent, rgba(47, 128, 255, .18), rgba(248, 251, 255, .38), rgba(47, 128, 255, .18), transparent);
@@ -501,7 +501,6 @@ input:focus-visible {
   white-space: nowrap;
   overflow: visible;
   isolation: isolate;
-  animation: lisaPanelLive 4.8s cubic-bezier(.45, 0, .55, 1) infinite alternate;
 }
 
 .status-panel::before,
@@ -540,6 +539,7 @@ input:focus-visible {
 .status-panel.deploying {
   border-color: rgba(140, 199, 255, .78);
   color: var(--ink);
+  animation: lisaDeployPanelPulse 2.6s cubic-bezier(.45, 0, .55, 1) infinite alternate;
 }
 
 .lisa-bot {
@@ -795,8 +795,10 @@ input:focus-visible {
 }
 
 .status-panel.is-working .lisa-eye {
-  width: 14px;
-  height: 22px;
+  top: 18px;
+  width: 13px;
+  height: 18px;
+  border-radius: 999px;
   opacity: .96;
   transform: translate3d(var(--look-x), -1px, 0);
 }
@@ -805,18 +807,19 @@ input:focus-visible {
   opacity: .62;
 }
 
-.status-panel.is-working .lisa-mouth {
-  bottom: 13px;
-  width: 34px;
-  height: 11px;
-  border-bottom-width: 3px;
+.status-panel.is-working .lisa-bot:not(.is-smiling-wide):not(.is-laughing) .lisa-mouth {
+  bottom: 14px;
+  width: 32px;
+  height: 12px;
+  border-bottom-width: 4px;
+  border-radius: 0 0 999px 999px;
   opacity: .92;
 }
 
 .status-panel.is-working .lisa-work-pulse {
-  opacity: .82;
-  transform: translateX(-50%) scale(1);
-  animation: lisaWorkingDots 1.4s linear infinite;
+  opacity: 0;
+  transform: translateX(-50%) scale(.92);
+  animation: none;
 }
 
 .lisa-bot.is-smiling-wide .lisa-cheek {
@@ -884,12 +887,13 @@ input:focus-visible {
 }
 
 .lisa-state {
-  max-width: 18ch;
-  overflow: hidden;
+  max-width: 100%;
   color: var(--muted);
   font-size: .8rem;
   font-weight: 750;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .status-panel.is-live {
@@ -1053,17 +1057,45 @@ input:focus-visible {
 
 .lisa-history li {
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 34px;
+  padding: 7px 0;
+  border-top: 1px solid rgba(203, 213, 225, .08);
   color: var(--muted);
   font-size: .84rem;
   line-height: 1.25;
 }
 
+.lisa-history li:first-child {
+  border-top: 0;
+}
+
 .lisa-history time {
-  color: var(--warning);
+  display: grid;
+  gap: 2px;
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: .78rem;
+  line-height: 1;
+}
+
+.history-date {
+  color: var(--accent);
+  font-size: .7rem;
+  font-weight: 850;
+}
+
+.history-clock {
+  color: var(--ink);
+  font-size: .88rem;
+  font-weight: 950;
+  text-shadow: 0 0 14px rgba(140, 199, 255, .38);
+}
+
+.history-message {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .status-dot,
@@ -1612,7 +1644,7 @@ body.intro-handoff .service-card {
 @keyframes networkSweep {
   0% {
     opacity: 0;
-    transform: skewX(-18deg) translateX(-62vw);
+    transform: skewX(-18deg) translateX(4vw);
   }
   18% {
     opacity: .72;
@@ -1622,7 +1654,7 @@ body.intro-handoff .service-card {
   }
   100% {
     opacity: 0;
-    transform: skewX(-18deg) translateX(128vw);
+    transform: skewX(-18deg) translateX(44vw);
   }
 }
 
@@ -1650,7 +1682,7 @@ body.intro-handoff .service-card {
   }
   100% {
     opacity: 0;
-    transform: translateX(124vw);
+    transform: translateX(64vw);
   }
 }
 
@@ -1676,14 +1708,21 @@ body.intro-handoff .service-card {
   }
 }
 
-@keyframes lisaPanelLive {
+@keyframes lisaDeployPanelPulse {
   from {
-    border-color: rgba(184, 196, 214, .22);
-    box-shadow: 0 0 0 rgba(47, 128, 255, 0);
+    border-color: rgba(140, 199, 255, .5);
+    box-shadow:
+      0 0 0 1px rgba(47, 128, 255, .14),
+      0 0 18px rgba(47, 128, 255, .1),
+      0 18px 46px rgba(0, 0, 0, .28);
   }
   to {
-    border-color: rgba(47, 128, 255, .58);
-    box-shadow: 0 0 34px rgba(47, 128, 255, .18);
+    border-color: rgba(248, 251, 255, .72);
+    box-shadow:
+      0 0 0 1px rgba(140, 199, 255, .32),
+      0 0 28px rgba(47, 128, 255, .28),
+      0 0 54px rgba(140, 199, 255, .16),
+      0 22px 54px rgba(0, 0, 0, .32);
   }
 }
 
