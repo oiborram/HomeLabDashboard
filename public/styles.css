@@ -1408,6 +1408,10 @@ body.intro-running .intro-sequence {
   transition: none;
 }
 
+body.intro-played .intro-sequence {
+  display: none;
+}
+
 .intro-plane {
   position: absolute;
   inset: -10vh -12vw;

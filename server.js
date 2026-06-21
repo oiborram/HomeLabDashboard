@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+export { app };
 const port = Number(process.env.PORT ?? 3000);
 const nginxConfigPath = process.env.NGINX_CONFIG_PATH ?? '/app/config/default.conf';
 const npmProxyHostDir = process.env.NPM_PROXY_HOST_DIR ?? '/app/npm-proxy-hosts';
@@ -44,6 +45,14 @@ app.get('/health', (_request, response) => {
   response.json({ ok: true });
 });
 
+app.get('*', (request, response, next) => {
+  if (!request.accepts('html')) {
+    next();
+    return;
+  }
+
+  response.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   app.listen(port, () => {
     console.log(`HomeLabDashboard listening on ${port}`);
@@ -436,3 +445,4 @@ function buildServiceUrl(_request, routePath, kind) {
 function appendPath(routePath, segment) {
   return `${routePath.endsWith('/') ? routePath : `${routePath}/`}${segment}`;
 }
+
