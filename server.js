@@ -478,11 +478,7 @@ function inferOrigin(config, locationStart) {
 
 function buildServiceUrl(_request, routePath, kind) {
   if (kind === 'API') {
-    if (routePath === '/api/') {
-      return appendPath(routePath, 'swagger/index.html');
-    }
-
-    return appendPath(routePath, 'openapi/v1.json');
+    return appendPath(routePath, 'swagger/index.html');
   }
 
   return routePath.endsWith('/') ? routePath : `${routePath}/`;
