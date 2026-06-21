@@ -343,6 +343,8 @@ body::before {
 }
 
 .hero {
+  position: relative;
+  z-index: 3;
   min-height: clamp(190px, 30vh, 340px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -375,6 +377,8 @@ h1 {
 }
 
 .ops-panel {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
   grid-template-areas: "search summary";
@@ -477,6 +481,7 @@ input:focus-visible {
 
 .status-panel {
   position: relative;
+  z-index: 1;
   align-self: end;
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);
@@ -520,6 +525,12 @@ input:focus-visible {
 .status-panel:focus {
   outline: 2px solid rgba(47, 128, 255, .58);
   outline-offset: 3px;
+}
+
+.status-panel:hover,
+.status-panel:focus,
+.status-panel:focus-within {
+  z-index: 4;
 }
 
 .status-panel.deploying {

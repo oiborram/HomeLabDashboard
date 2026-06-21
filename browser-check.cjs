@@ -156,6 +156,7 @@ const { chromium } = require('playwright');
   const lisaLaugh = await probeLisaLaugh(page);
   const lisaWorking = await probeLisaWorking(page);
   const lisaHoverTracking = await probeLisaHoverTracking(page);
+  const lisaHistoryLayer = await probeLisaHistoryLayer(page);
   const hoverProbe = await probeServiceHover(page);
   await page.setViewportSize({ width: 360, height: 800 });
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -179,6 +180,7 @@ const { chromium } = require('playwright');
     lisaLaugh,
     lisaWorking,
     lisaHoverTracking,
+    lisaHistoryLayer,
     hoverProbe,
     mobileLayout,
     errors
@@ -550,8 +552,12 @@ async function probeLisaWorking(page) {
 
 async function probeLisaHoverTracking(page) {
   const box = await page.locator('#lisaStatus .lisa-face').boundingBox();
+  const panelBox = await page.locator('#lisaStatus').boundingBox();
   if (!box) {
     throw new Error('No Lisa face available for hover tracking probe.');
+  }
+  if (!panelBox) {
+    throw new Error('No Lisa status panel available for hover tracking probe.');
   }
 
   await page.mouse.move(box.x + box.width * 0.18, box.y + box.height * 0.42);
@@ -562,7 +568,7 @@ async function probeLisaHoverTracking(page) {
   await page.waitForTimeout(120);
   const rightLook = await readLisaHoverTrackingState(page);
 
-  await page.mouse.move(box.x + box.width + 80, box.y + box.height + 80);
+  await page.mouse.move(Math.max(0, panelBox.x - 24), Math.max(0, panelBox.y - 24));
   await page.waitForTimeout(180);
   const afterLeave = await page.evaluate(() => {
     const panel = document.querySelector('#lisaStatus');
@@ -598,6 +604,53 @@ async function probeLisaHoverTracking(page) {
 
   if (!leftLook.tracking || !rightLook.tracking || !movedHorizontally || !noHoverWink || !animationsPaused || !resetAfterLeave) {
     throw new Error(`Lisa hover tracking probe failed: ${JSON.stringify(result)}`);
+  }
+
+  return result;
+}
+
+async function probeLisaHistoryLayer(page) {
+  const box = await page.locator('#lisaStatus').boundingBox();
+  if (!box) {
+    throw new Error('No Lisa status panel available for history layer probe.');
+  }
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(120);
+
+  const result = await page.evaluate(() => {
+    const panel = document.querySelector('#lisaStatus');
+    const history = panel?.querySelector('.lisa-history');
+    const rect = history?.getBoundingClientRect();
+    const style = history ? getComputedStyle(history) : null;
+
+    if (!history || !rect) {
+      return {
+        visible: false,
+        topElementIsHistory: false
+      };
+    }
+
+    const x = Math.min(rect.right - 8, Math.max(rect.left + 8, rect.left + rect.width / 2));
+    const y = Math.min(rect.bottom - 8, Math.max(rect.top + 8, rect.top + 24));
+    const topElement = document.elementFromPoint(x, y);
+
+    return {
+      display: style?.display,
+      visible: style?.display !== 'none' && rect.width > 0 && rect.height > 0,
+      topElementIsHistory: Boolean(topElement?.closest('.lisa-history')),
+      topElementClass: topElement?.className?.toString() ?? '',
+      rect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right
+      }
+    };
+  });
+
+  if (!result.visible || !result.topElementIsHistory) {
+    throw new Error(`Lisa history layer probe failed: ${JSON.stringify(result)}`);
   }
 
   return result;
