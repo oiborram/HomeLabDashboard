@@ -6,6 +6,7 @@ const lisaStatusEl = document.querySelector('#lisaStatus');
 const lisaDeploymentDialogEl = document.querySelector('#lisaDeploymentDialog');
 const lisaDeploymentBodyEl = document.querySelector('#lisaDeploymentBody');
 const lisaDeploymentCloseEl = document.querySelector('#lisaDeploymentClose');
+const lisaDeploymentExpandEl = document.querySelector('#lisaDeploymentExpand');
 
 let services = [];
 let latestLisa = {
@@ -19,6 +20,10 @@ let lisaExpressionTimer = null;
 let lisaExpressionResetTimer = null;
 let lisaExpressionActive = false;
 let lisaPointerTracking = false;
+let lastDeploymentLisa = null;
+let lastDeploymentKey = null;
+let lisaDeploymentTrackingReady = false;
+let lisaWasDeploying = false;
 
 const lisaPersonalityDelay = {
   firstMin: 3200,
@@ -70,6 +75,7 @@ async function loadDashboard() {
 
   const data = await response.json();
   const lisa = applyLisaPreview(data.lisa);
+  trackLisaDeployment(lisa);
   services = data.services;
   latestLisa = lisa;
   if (!lisaPointerTracking && !lisaExpressionActive) {
@@ -87,9 +93,83 @@ async function loadLisaStatus() {
 
   const data = await response.json();
   latestLisa = applyLisaPreview(data.lisa);
+  trackLisaDeployment(latestLisa);
   if (!lisaPointerTracking && !lisaExpressionActive) {
     renderLisa(latestLisa);
   }
+}
+
+function trackLisaDeployment(lisa) {
+  if (!lisaDeploymentTrackingReady) {
+    lisaDeploymentTrackingReady = true;
+    if (lisa?.deploying) {
+      lastDeploymentLisa = structuredCloneLisa(lisa);
+      lastDeploymentKey = lisaDeploymentKey(lisa);
+    }
+    lisaWasDeploying = Boolean(lisa?.deploying);
+    return;
+  }
+
+  if (!lisa?.deploying) {
+    if (lisaWasDeploying && lastDeploymentLisa) {
+      lastDeploymentLisa = completeLisaDeploymentSnapshot(lastDeploymentLisa);
+      if (lisaDeploymentDialogEl?.open) {
+        renderLisaDeploymentDialog(lastDeploymentLisa);
+      }
+    }
+    lisaWasDeploying = false;
+    return;
+  }
+
+  const deploymentKey = lisaDeploymentKey(lisa);
+  const isNewDeployment = deploymentKey !== lastDeploymentKey;
+  lastDeploymentLisa = structuredCloneLisa(lisa);
+  lastDeploymentKey = deploymentKey;
+
+  if (isNewDeployment) {
+    renderLisaDeploymentDialog(lastDeploymentLisa);
+    if (lisaPreviewOverride !== 'working') {
+      openLisaDeploymentDialog();
+    }
+  } else if (lisaDeploymentDialogEl?.open) {
+    renderLisaDeploymentDialog(lastDeploymentLisa);
+  }
+  lisaWasDeploying = true;
+}
+
+function lisaDeploymentKey(lisa) {
+  const deployment = lisa.deployment ?? {};
+  return [
+    deployment.repository ?? '',
+    deployment.commitSha ?? '',
+    deployment.startedAtUtc ?? '',
+    deployment.application ?? lisa.application ?? '',
+    deployment.route ?? ''
+  ].join('|');
+}
+
+function structuredCloneLisa(lisa) {
+  return JSON.parse(JSON.stringify(lisa));
+}
+
+function completeLisaDeploymentSnapshot(lisa) {
+  const snapshot = structuredCloneLisa(lisa);
+  snapshot.status = 'idle';
+  snapshot.deploying = false;
+  snapshot.deployment = {
+    ...(snapshot.deployment ?? {}),
+    phase: 'complete',
+    phaseLabel: 'Completado',
+    completedAtUtc: new Date().toISOString()
+  };
+  const phases = normalizeLisaDeploymentPhases(snapshot).map(phase => ({
+    ...phase,
+    status: 'done',
+    detail: phase.status === 'current' ? 'Finalizado' : phase.detail
+  }));
+  snapshot.deployment.phases = phases;
+  snapshot.deploymentPhases = phases;
+  return snapshot;
 }
 
 function applyLisaPreview(lisa) {
@@ -178,7 +258,7 @@ function renderSummary(data) {
 
 function renderLisa(lisa) {
   const status = lisa.status ?? (lisa.deploying ? 'working' : 'idle');
-  const canOpenDeployment = status === 'working';
+  const hasDeploymentPanel = status === 'working' || lastDeploymentLisa !== null;
   const statusClasses = status === 'working'
     ? 'deploying is-live is-working'
     : status === 'offline'
@@ -187,9 +267,9 @@ function renderLisa(lisa) {
 
   lisaStatusEl.className = `status-panel lisa-mascot ${statusClasses}`;
   lisaStatusEl.tabIndex = 0;
-  lisaStatusEl.setAttribute('role', canOpenDeployment ? 'button' : 'status');
+  lisaStatusEl.setAttribute('role', hasDeploymentPanel ? 'button' : 'status');
   lisaStatusEl.setAttribute('aria-label', lisaAriaLabel(lisa, status));
-  if (canOpenDeployment) {
+  if (hasDeploymentPanel) {
     lisaStatusEl.setAttribute('aria-haspopup', 'dialog');
     lisaStatusEl.setAttribute('aria-expanded', String(lisaDeploymentDialogEl?.open));
   } else {
@@ -250,14 +330,15 @@ function renderLisa(lisa) {
   lisaStatusEl.onpointermove = updateLisaPointerTracking;
   lisaStatusEl.onpointerleave = stopLisaPointerTracking;
   lisaStatusEl.onpointercancel = stopLisaPointerTracking;
-  lisaStatusEl.onclick = canOpenDeployment ? openLisaDeploymentDialog : null;
-  lisaStatusEl.onkeydown = canOpenDeployment ? handleLisaStatusKeydown : null;
+  lisaStatusEl.onclick = hasDeploymentPanel ? openLisaDeploymentDialog : null;
+  lisaStatusEl.onkeydown = hasDeploymentPanel ? handleLisaStatusKeydown : null;
   lisaStatusEl.onfocus = null;
 
   renderLisaHistory(lisa);
-  renderLisaDeploymentDialog(lisa);
-  if (!canOpenDeployment && lisaDeploymentDialogEl?.open) {
-    lisaDeploymentDialogEl.close();
+  if (lisa.deploying) {
+    renderLisaDeploymentDialog(lastDeploymentLisa ?? lisa);
+  } else if (lisaDeploymentDialogEl?.open && lastDeploymentLisa) {
+    renderLisaDeploymentDialog(lastDeploymentLisa);
   }
   if (status === 'offline') {
     stopLisaExpressionLoop();
@@ -271,6 +352,11 @@ function lisaAriaLabel(lisa, status) {
     const application = lisa.deployment?.application || lisa.application || 'aplicación';
     const phase = lisa.deployment?.phaseLabel || 'despliegue en curso';
     return `Lisa desplegando ${application}: ${phase}. Abrir fases del despliegue actual.`;
+  }
+
+  if (lastDeploymentLisa) {
+    const application = lisaDeploymentAppText(lastDeploymentLisa);
+    return `Lisa en reposo. Abrir último despliegue registrado en esta página: ${application}.`;
   }
 
   if (status === 'offline') {
@@ -373,13 +459,20 @@ function handleLisaStatusKeydown(event) {
 }
 
 function openLisaDeploymentDialog() {
-  if (!lisaDeploymentDialogEl || !latestLisa.deploying) {
+  if (!lisaDeploymentDialogEl) {
     return;
   }
 
-  renderLisaDeploymentDialog(latestLisa);
+  const deploymentLisa = latestLisa.deploying ? latestLisa : lastDeploymentLisa;
+  if (!deploymentLisa) {
+    return;
+  }
+
+  renderLisaDeploymentDialog(deploymentLisa);
   setLisaDialogOrigin();
-  lisaDeploymentDialogEl.showModal();
+  if (!lisaDeploymentDialogEl.open) {
+    lisaDeploymentDialogEl.showModal();
+  }
   lisaStatusEl.setAttribute('aria-expanded', 'true');
 }
 
@@ -401,6 +494,23 @@ function closeLisaDeploymentDialog() {
   lisaDeploymentDialogEl.close();
 }
 
+function toggleLisaDeploymentExpanded() {
+  if (!lisaDeploymentDialogEl) {
+    return;
+  }
+
+  const expanded = !lisaDeploymentDialogEl.classList.contains('is-expanded');
+  lisaDeploymentDialogEl.classList.toggle('is-expanded', expanded);
+  lisaDeploymentExpandEl?.setAttribute('aria-pressed', String(expanded));
+  lisaDeploymentExpandEl?.setAttribute(
+    'aria-label',
+    expanded ? 'Contraer panel de despliegue' : 'Expandir panel de despliegue'
+  );
+  if (lisaDeploymentExpandEl) {
+    lisaDeploymentExpandEl.textContent = expanded ? 'Contraer' : 'Expandir';
+  }
+}
+
 function renderLisaDeploymentDialog(lisa) {
   if (!lisaDeploymentBodyEl) {
     return;
@@ -413,7 +523,7 @@ function renderLisaDeploymentDialog(lisa) {
   const application = document.createElement('p');
   application.className = 'deployment-app';
   const applicationLabel = document.createElement('span');
-  applicationLabel.textContent = 'Desplegando';
+  applicationLabel.textContent = lisa.deploying ? 'Desplegando' : 'Último despliegue';
   const applicationValue = document.createElement('strong');
   applicationValue.textContent = applicationName;
   application.append(applicationLabel, applicationValue);
@@ -816,8 +926,15 @@ function cleanUpstream(upstream) {
 
 searchEl.addEventListener('input', renderServices);
 lisaDeploymentCloseEl?.addEventListener('click', closeLisaDeploymentDialog);
+lisaDeploymentExpandEl?.addEventListener('click', toggleLisaDeploymentExpanded);
 lisaDeploymentDialogEl?.addEventListener('close', () => {
   lisaStatusEl.setAttribute('aria-expanded', 'false');
+  lisaDeploymentDialogEl.classList.remove('is-expanded');
+  lisaDeploymentExpandEl?.setAttribute('aria-pressed', 'false');
+  lisaDeploymentExpandEl?.setAttribute('aria-label', 'Expandir panel de despliegue');
+  if (lisaDeploymentExpandEl) {
+    lisaDeploymentExpandEl.textContent = 'Expandir';
+  }
   lisaStatusEl.focus();
 });
 lisaDeploymentDialogEl?.addEventListener('click', event => {

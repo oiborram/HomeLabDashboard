@@ -535,8 +535,8 @@ async function probeLisaWorking(page) {
       liveClass: panel?.classList.contains('is-live') ?? false,
       stateText: state?.textContent?.trim(),
       hasPulse: Boolean(pulse),
-      pulseHidden: Number(pulseStyle?.opacity ?? '1') === 0,
-      pulseAnimationRemoved: !animations.includes('lisaWorkingDots'),
+      pulseVisible: Number(pulseStyle?.opacity ?? '0') > 0.35,
+      pulseAnimationActive: animations.includes('lisaWorkingDots'),
       focusAnimation: animations.includes('lisaWorkingFocus'),
       panelPulse: animations.includes('lisaDeployPanelPulse'),
       faceAnimation: faceStyle?.animationName,
@@ -553,8 +553,8 @@ async function probeLisaWorking(page) {
     !result.liveClass ||
     !result.stateText?.startsWith('Desplegando:') ||
     !result.hasPulse ||
-    !result.pulseHidden ||
-    !result.pulseAnimationRemoved ||
+    !result.pulseVisible ||
+    !result.pulseAnimationActive ||
     !result.focusAnimation ||
     !result.panelPulse ||
     result.leftEyeRadius < 8 ||
