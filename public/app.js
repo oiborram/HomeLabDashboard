@@ -3,6 +3,9 @@ const emptyEl = document.querySelector('#empty');
 const searchEl = document.querySelector('#search');
 const summaryEl = document.querySelector('#summary');
 const lisaStatusEl = document.querySelector('#lisaStatus');
+const lisaDeploymentDialogEl = document.querySelector('#lisaDeploymentDialog');
+const lisaDeploymentBodyEl = document.querySelector('#lisaDeploymentBody');
+const lisaDeploymentCloseEl = document.querySelector('#lisaDeploymentClose');
 
 let services = [];
 let latestLisa = {
@@ -104,6 +107,11 @@ function createLisaWorkingPreview(lisa = {}) {
     available: true,
     deploying: true,
     application: 'preview-lisa',
+    deploymentPhases: [
+      { name: 'Preparando', status: 'done', detail: 'Backup de configuración' },
+      { name: 'Inspección', status: 'current', detail: 'Compatibilidad de datos' },
+      { name: 'Reconstrucción', status: 'pending', detail: 'Pendiente de ejecución' }
+    ],
     history: [
       {
         timestamp: new Date().toISOString(),
@@ -152,6 +160,7 @@ function renderSummary(data) {
 
 function renderLisa(lisa) {
   const status = lisa.status ?? (lisa.deploying ? 'working' : 'idle');
+  const canOpenDeployment = status === 'working';
   const statusClasses = status === 'working'
     ? 'deploying is-live is-working'
     : status === 'offline'
@@ -160,7 +169,15 @@ function renderLisa(lisa) {
 
   lisaStatusEl.className = `status-panel lisa-mascot ${statusClasses}`;
   lisaStatusEl.tabIndex = 0;
+  lisaStatusEl.setAttribute('role', canOpenDeployment ? 'button' : 'status');
   lisaStatusEl.setAttribute('aria-label', lisaAriaLabel(lisa, status));
+  if (canOpenDeployment) {
+    lisaStatusEl.setAttribute('aria-haspopup', 'dialog');
+    lisaStatusEl.setAttribute('aria-expanded', String(lisaDeploymentDialogEl?.open));
+  } else {
+    lisaStatusEl.removeAttribute('aria-haspopup');
+    lisaStatusEl.removeAttribute('aria-expanded');
+  }
   lisaStatusEl.replaceChildren();
 
   const bot = document.createElement('div');
@@ -215,9 +232,15 @@ function renderLisa(lisa) {
   lisaStatusEl.onpointermove = updateLisaPointerTracking;
   lisaStatusEl.onpointerleave = stopLisaPointerTracking;
   lisaStatusEl.onpointercancel = stopLisaPointerTracking;
+  lisaStatusEl.onclick = canOpenDeployment ? openLisaDeploymentDialog : null;
+  lisaStatusEl.onkeydown = canOpenDeployment ? handleLisaStatusKeydown : null;
   lisaStatusEl.onfocus = null;
 
   renderLisaHistory(lisa);
+  renderLisaDeploymentDialog(lisa);
+  if (!canOpenDeployment && lisaDeploymentDialogEl?.open) {
+    lisaDeploymentDialogEl.close();
+  }
   if (status === 'offline') {
     stopLisaExpressionLoop();
   } else {
@@ -227,7 +250,7 @@ function renderLisa(lisa) {
 
 function lisaAriaLabel(lisa, status) {
   if (status === 'working') {
-    return `Lisa live, desplegando ${lisa.application || 'aplicación'}`;
+    return `Lisa live, desplegando ${lisa.application || 'aplicación'}. Abrir fases del despliegue actual.`;
   }
 
   if (status === 'offline') {
@@ -290,6 +313,133 @@ function renderLisaHistory(lisa) {
     list.append(item);
   }
   tooltip.append(list);
+}
+
+function handleLisaStatusKeydown(event) {
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return;
+  }
+
+  event.preventDefault();
+  openLisaDeploymentDialog();
+}
+
+function openLisaDeploymentDialog() {
+  if (!lisaDeploymentDialogEl || !latestLisa.deploying) {
+    return;
+  }
+
+  renderLisaDeploymentDialog(latestLisa);
+  lisaDeploymentDialogEl.showModal();
+  lisaStatusEl.setAttribute('aria-expanded', 'true');
+}
+
+function closeLisaDeploymentDialog() {
+  if (!lisaDeploymentDialogEl?.open) {
+    return;
+  }
+
+  lisaDeploymentDialogEl.close();
+}
+
+function renderLisaDeploymentDialog(lisa) {
+  if (!lisaDeploymentBodyEl) {
+    return;
+  }
+
+  lisaDeploymentBodyEl.replaceChildren();
+
+  const application = document.createElement('p');
+  application.className = 'deployment-app';
+  application.textContent = `Desplegando: ${lisa.application || 'aplicación'}`;
+
+  const phases = normalizeLisaDeploymentPhases(lisa);
+  const list = document.createElement('ol');
+  list.className = 'deployment-phases';
+
+  for (const phase of phases) {
+    const item = document.createElement('li');
+    item.className = `deployment-phase is-${phase.status}`;
+
+    const marker = document.createElement('span');
+    marker.className = 'phase-marker';
+    marker.setAttribute('aria-hidden', 'true');
+
+    const copy = document.createElement('span');
+    copy.className = 'phase-copy';
+
+    const name = document.createElement('strong');
+    name.textContent = phase.name;
+
+    const detail = document.createElement('span');
+    detail.textContent = phase.detail || lisaPhaseStatusText(phase.status);
+
+    copy.append(name, detail);
+    item.append(marker, copy);
+    list.append(item);
+  }
+
+  lisaDeploymentBodyEl.append(application, list);
+}
+
+function normalizeLisaDeploymentPhases(lisa) {
+  const source =
+    lisa.deploymentPhases ??
+    lisa.phases ??
+    lisa.currentDeployment?.phases ??
+    lisa.deployment?.phases ??
+    lisa.activeDeployment?.phases ??
+    lisa.progress?.phases;
+
+  if (!Array.isArray(source) || source.length === 0) {
+    return [
+      {
+        name: lisa.application || 'Despliegue activo',
+        status: 'current',
+        detail: 'Lisa está desplegando esta aplicación.'
+      }
+    ];
+  }
+
+  return source.map((phase, index) => {
+    if (typeof phase === 'string') {
+      return {
+        name: phase,
+        status: index === 0 ? 'current' : 'pending',
+        detail: ''
+      };
+    }
+
+    const rawStatus = String(phase.status ?? phase.state ?? '').toLowerCase();
+    return {
+      name: phase.name ?? phase.title ?? phase.label ?? `Fase ${index + 1}`,
+      status: normalizeLisaPhaseStatus(rawStatus),
+      detail: phase.detail ?? phase.description ?? phase.message ?? ''
+    };
+  });
+}
+
+function normalizeLisaPhaseStatus(status) {
+  if (['done', 'completed', 'complete', 'success', 'hecha'].includes(status)) {
+    return 'done';
+  }
+
+  if (['current', 'active', 'running', 'in_progress', 'now', 'ahora'].includes(status)) {
+    return 'current';
+  }
+
+  if (['failed', 'error', 'danger'].includes(status)) {
+    return 'failed';
+  }
+
+  return 'pending';
+}
+
+function lisaPhaseStatusText(status) {
+  if (status === 'done') return 'Hecha';
+  if (status === 'current') return 'Ahora';
+  if (status === 'failed') return 'Error';
+  return 'Pendiente';
 }
 
 function startLisaExpressionLoop() {
@@ -574,6 +724,16 @@ function cleanUpstream(upstream) {
 }
 
 searchEl.addEventListener('input', renderServices);
+lisaDeploymentCloseEl?.addEventListener('click', closeLisaDeploymentDialog);
+lisaDeploymentDialogEl?.addEventListener('close', () => {
+  lisaStatusEl.setAttribute('aria-expanded', 'false');
+  lisaStatusEl.focus();
+});
+lisaDeploymentDialogEl?.addEventListener('click', event => {
+  if (event.target === lisaDeploymentDialogEl) {
+    closeLisaDeploymentDialog();
+  }
+});
 
 loadDashboard().catch(error => {
   summaryEl.textContent = 'No se pudo cargar el dashboard.';

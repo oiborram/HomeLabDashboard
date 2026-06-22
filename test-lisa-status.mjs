@@ -74,4 +74,34 @@ test('readLisaStatus marks Lisa as working when active deployment marker exists'
   assert.equal(status.available, true);
   assert.equal(status.deploying, true);
   assert.equal(status.application, 'daria');
+  assert.deepEqual(status.deploymentPhases, []);
+});
+
+test('readLisaStatus exposes active deployment phases from JSON marker', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'homelab-lisa-phases-'));
+  const stateFilePath = path.join(directory, 'state.json');
+  const activeDeploymentPath = path.join(directory, 'deploying.txt');
+  await fs.writeFile(stateFilePath, JSON.stringify({ Repositories: {} }), 'utf8');
+  await fs.writeFile(activeDeploymentPath, JSON.stringify({
+    Application: 'daria',
+    Phases: [
+      { Name: 'Preparando', Status: 'done', Detail: 'Backup de configuración' },
+      { Name: 'Inspección', Status: 'running', Detail: 'Compatibilidad de datos' },
+      { Name: 'Reconstrucción', Status: 'pending' }
+    ]
+  }), 'utf8');
+
+  const status = await readLisaStatus({
+    stateFilePath,
+    activeDeploymentPath
+  });
+
+  assert.equal(status.status, 'working');
+  assert.equal(status.application, 'daria');
+  assert.equal(status.currentDeployment.application, 'daria');
+  assert.deepEqual(status.deploymentPhases, [
+    { name: 'Preparando', status: 'done', detail: 'Backup de configuración' },
+    { name: 'Inspección', status: 'current', detail: 'Compatibilidad de datos' },
+    { name: 'Reconstrucción', status: 'pending', detail: '' }
+  ]);
 });

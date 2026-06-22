@@ -179,12 +179,15 @@ export async function readLisaStatus(options = {}) {
   const repositories = normalizeLisaRepositories(stateResult.state);
   const history = buildLisaHistory(repositories);
   const deploying = Boolean(activeDeployment);
+  const activeDeploymentDetails = normalizeActiveLisaDeployment(activeDeployment);
 
   return {
     status: deploying ? 'working' : 'idle',
     available: true,
     deploying,
-    application: activeDeployment,
+    application: activeDeploymentDetails.application,
+    deploymentPhases: activeDeploymentDetails.phases,
+    currentDeployment: deploying ? activeDeploymentDetails : null,
     reason: null,
     stateFilePath,
     watcher,
@@ -235,7 +238,15 @@ async function readLisaDeploymentState(stateFilePath) {
 async function readActiveLisaDeployment(activeDeploymentPath) {
   try {
     const application = (await fs.readFile(activeDeploymentPath, 'utf8')).trim();
-    return application || 'despliegue activo';
+    if (!application) {
+      return 'despliegue activo';
+    }
+
+    try {
+      return JSON.parse(application);
+    } catch {
+      return application;
+    }
   } catch (error) {
     if (error.code === 'ENOENT') {
       return null;
@@ -243,6 +254,100 @@ async function readActiveLisaDeployment(activeDeploymentPath) {
 
     return null;
   }
+}
+
+function normalizeActiveLisaDeployment(activeDeployment) {
+  if (!activeDeployment) {
+    return {
+      application: null,
+      phases: []
+    };
+  }
+
+  if (typeof activeDeployment === 'string') {
+    return {
+      application: activeDeployment,
+      phases: []
+    };
+  }
+
+  if (typeof activeDeployment !== 'object') {
+    return {
+      application: 'despliegue activo',
+      phases: []
+    };
+  }
+
+  return {
+    application:
+      getLisaField(activeDeployment, 'Application', 'application') ??
+      getLisaField(activeDeployment, 'App', 'app') ??
+      getLisaField(activeDeployment, 'Name', 'name') ??
+      'despliegue activo',
+    phases: normalizeLisaDeploymentPhases(
+      getLisaField(activeDeployment, 'Phases', 'phases') ??
+      getLisaField(activeDeployment, 'Steps', 'steps') ??
+      []
+    )
+  };
+}
+
+function normalizeLisaDeploymentPhases(phases) {
+  if (!Array.isArray(phases)) {
+    return [];
+  }
+
+  return phases.map((phase, index) => {
+    if (typeof phase === 'string') {
+      return {
+        name: phase,
+        status: index === 0 ? 'current' : 'pending',
+        detail: ''
+      };
+    }
+
+    if (!phase || typeof phase !== 'object') {
+      return {
+        name: `Fase ${index + 1}`,
+        status: 'pending',
+        detail: ''
+      };
+    }
+
+    return {
+      name:
+        getLisaField(phase, 'Name', 'name') ??
+        getLisaField(phase, 'Title', 'title') ??
+        getLisaField(phase, 'Label', 'label') ??
+        `Fase ${index + 1}`,
+      status: normalizeLisaPhaseStatus(
+        getLisaField(phase, 'Status', 'status') ??
+        getLisaField(phase, 'State', 'state')
+      ),
+      detail:
+        getLisaField(phase, 'Detail', 'detail') ??
+        getLisaField(phase, 'Description', 'description') ??
+        getLisaField(phase, 'Message', 'message') ??
+        ''
+    };
+  });
+}
+
+function normalizeLisaPhaseStatus(status) {
+  const value = String(status ?? '').toLowerCase();
+  if (['done', 'completed', 'complete', 'success', 'hecha'].includes(value)) {
+    return 'done';
+  }
+
+  if (['current', 'active', 'running', 'in_progress', 'now', 'ahora'].includes(value)) {
+    return 'current';
+  }
+
+  if (['failed', 'error', 'danger'].includes(value)) {
+    return 'failed';
+  }
+
+  return 'pending';
 }
 
 async function readLisaWatcherControl(stateFilePath) {
