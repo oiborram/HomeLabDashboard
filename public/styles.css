@@ -504,6 +504,12 @@ input:focus-visible {
   white-space: nowrap;
   overflow: visible;
   isolation: isolate;
+  transform-origin: center;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    transform 180ms cubic-bezier(.22, 1, .36, 1);
 }
 
 .status-panel::before,
@@ -542,7 +548,25 @@ input:focus-visible {
 .status-panel.deploying {
   border-color: rgba(140, 199, 255, .78);
   color: var(--ink);
+  background:
+    linear-gradient(135deg, rgba(16, 32, 61, .98), rgba(3, 7, 15, .96)),
+    radial-gradient(circle at 18% 50%, rgba(47, 128, 255, .26), transparent 17rem);
+  box-shadow:
+    0 0 0 1px rgba(47, 128, 255, .36),
+    0 0 34px rgba(47, 128, 255, .34),
+    0 0 76px rgba(140, 199, 255, .22),
+    0 30px 78px rgba(0, 0, 0, .55);
   animation: lisaDeployPanelPulse 2.6s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+
+.status-panel.deploying:hover,
+.status-panel.deploying:focus {
+  transform: translate3d(0, -2px, 0);
+  box-shadow:
+    0 0 0 1px rgba(140, 199, 255, .56),
+    0 0 46px rgba(47, 128, 255, .46),
+    0 0 96px rgba(140, 199, 255, .28),
+    0 34px 86px rgba(0, 0, 0, .6);
 }
 
 .lisa-bot {
@@ -890,6 +914,8 @@ input:focus-visible {
 }
 
 .lisa-state {
+  display: grid;
+  gap: 2px;
   max-width: 100%;
   color: var(--muted);
   font-size: .8rem;
@@ -897,6 +923,37 @@ input:focus-visible {
   line-height: 1.25;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.lisa-state-label,
+.lisa-state-phase {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lisa-state-label {
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+  font-size: .68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lisa-state-app {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--primary);
+  font-size: .96rem;
+  font-weight: 950;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 18px rgba(47, 128, 255, .44);
+}
+
+.lisa-state-phase {
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.16;
 }
 
 .status-panel.is-live {
@@ -1179,27 +1236,83 @@ input:focus-visible {
 }
 
 .lisa-deployment-dialog {
-  width: min(620px, calc(100vw - 28px));
+  --origin-x: calc(100vw - 160px);
+  --origin-y: 140px;
+  width: min(820px, calc(100vw - 28px));
   max-height: min(760px, calc(100vh - 28px));
   padding: 0;
   border: 1px solid rgba(140, 199, 255, .36);
   background: transparent;
   color: var(--ink);
+  opacity: 0;
+  transform:
+    translate(
+      calc(var(--origin-x) - 50vw),
+      calc(var(--origin-y) - 50vh)
+    )
+    scale(.18);
+  transform-origin: var(--origin-x) var(--origin-y);
+  transition:
+    opacity 220ms ease,
+    transform 300ms cubic-bezier(.16, 1, .3, 1);
+}
+
+.lisa-deployment-dialog[open] {
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+}
+
+@starting-style {
+  .lisa-deployment-dialog[open] {
+    opacity: 0;
+    transform:
+      translate(
+        calc(var(--origin-x) - 50vw),
+        calc(var(--origin-y) - 50vh)
+      )
+      scale(.18);
+  }
+
+  .lisa-deployment-dialog[open]::backdrop {
+    background: rgba(1, 4, 10, 0);
+  }
 }
 
 .lisa-deployment-dialog::backdrop {
-  background: rgba(1, 4, 10, .68);
+  background: rgba(1, 4, 10, 0);
   backdrop-filter: blur(7px);
+  transition: background-color 220ms ease;
+}
+
+.lisa-deployment-dialog[open]::backdrop {
+  background: rgba(1, 4, 10, .72);
 }
 
 .dialog-panel {
-  display: grid;
+  position: relative;
+  display: block;
   max-height: min(760px, calc(100vh - 28px));
   overflow: hidden;
   background:
     linear-gradient(135deg, rgba(16, 24, 39, .98), rgba(3, 5, 10, .98)),
     radial-gradient(circle at 20% 0, rgba(47, 128, 255, .2), transparent 24rem);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, .54);
+  box-shadow:
+    0 0 0 1px rgba(47, 128, 255, .18),
+    0 0 60px rgba(47, 128, 255, .18),
+    0 24px 70px rgba(0, 0, 0, .58);
+}
+
+.dialog-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 0 32%, rgba(47, 128, 255, .18), transparent 64% 100%),
+    repeating-linear-gradient(90deg, rgba(140, 199, 255, .07) 0 1px, transparent 1px 48px);
+  opacity: .38;
+  pointer-events: none;
+  transform: translateX(-42%);
+  animation: deploymentPanelScan 2.8s cubic-bezier(.16, 1, .3, 1) both;
 }
 
 .dialog-header {
@@ -1246,21 +1359,65 @@ input:focus-visible {
 
 .dialog-body {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   min-height: 0;
-  overflow: auto;
-  padding: 16px 18px 18px;
+  overflow: visible;
+  padding: 12px 18px 14px;
 }
 
 .deployment-app {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
   margin: 0;
   color: var(--muted);
-  font-size: .9rem;
+  font-size: .86rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.deployment-app strong {
+  color: var(--primary);
+  font-size: 1.08rem;
+  line-height: 1.1;
+  text-transform: none;
+  text-shadow: 0 0 22px rgba(47, 128, 255, .44);
+}
+
+.deployment-progress {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(140, 199, 255, .2);
+  background: rgba(3, 5, 10, .62);
+}
+
+.deployment-progress::before,
+.deployment-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+}
+
+.deployment-progress::before {
+  background: linear-gradient(90deg, rgba(47, 128, 255, .9), rgba(140, 199, 255, .92));
+  box-shadow: 0 0 22px rgba(47, 128, 255, .5);
+  transform: scaleX(var(--phase-progress, 0));
+  animation: deploymentProgressGrow 640ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.deployment-progress::after {
+  background: linear-gradient(90deg, transparent, rgba(248, 251, 255, .42), transparent);
+  transform: translateX(-100%);
+  animation: deploymentProgressSweep 1.8s cubic-bezier(.16, 1, .3, 1) infinite;
 }
 
 .deployment-phases {
   display: grid;
-  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1269,17 +1426,26 @@ input:focus-visible {
 .deployment-phase {
   position: relative;
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 12px;
-  padding: 0 0 18px;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid rgba(203, 213, 225, .12);
+  background:
+    linear-gradient(90deg, rgba(47, 128, 255, .08), transparent 46%),
+    rgba(3, 5, 10, .42);
+  opacity: 0;
+  transform: translate3d(-14px, 0, 0);
+  animation: deploymentPhaseEnter 420ms cubic-bezier(.16, 1, .3, 1) calc(var(--phase-index, 0) * 45ms) both;
 }
 
 .deployment-phase:not(:last-child)::before {
   content: "";
   position: absolute;
-  top: 18px;
-  bottom: 0;
-  left: 8px;
+  top: calc(50% + 14px);
+  bottom: -24px;
+  left: 21px;
   width: 1px;
   background: rgba(203, 213, 225, .18);
 }
@@ -1287,47 +1453,90 @@ input:focus-visible {
 .phase-marker {
   position: relative;
   z-index: 1;
-  width: 17px;
-  height: 17px;
-  margin-top: 2px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
   border: 1px solid rgba(184, 196, 214, .4);
-  border-radius: 50%;
+  border-radius: 6px;
   background: rgba(3, 5, 10, .94);
+  color: var(--muted);
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: .68rem;
+  font-weight: 900;
 }
 
 .phase-copy {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .phase-copy strong {
   color: var(--ink);
-  font-size: .94rem;
-  line-height: 1.2;
+  font-size: .88rem;
+  line-height: 1.12;
 }
 
 .phase-copy span {
   color: var(--muted);
-  font-size: .84rem;
-  line-height: 1.35;
+  font-size: .74rem;
+  line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.deployment-phase .phase-state {
+  justify-self: end;
+  min-width: 58px;
+  padding: 3px 6px;
+  border: 1px solid rgba(203, 213, 225, .14);
+  background: rgba(8, 13, 24, .72);
+  color: var(--muted);
+  font-size: .62rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.deployment-phase.is-done {
+  border-color: rgba(47, 128, 255, .24);
 }
 
 .deployment-phase.is-done .phase-marker {
   border-color: rgba(140, 199, 255, .72);
   background: var(--primary);
+  color: var(--canvas);
   box-shadow: 0 0 18px rgba(47, 128, 255, .34);
+}
+
+.deployment-phase.is-current {
+  border-color: rgba(140, 199, 255, .54);
+  background:
+    linear-gradient(90deg, rgba(47, 128, 255, .22), transparent 54%),
+    rgba(10, 22, 42, .82);
+  box-shadow:
+    inset 0 0 0 1px rgba(47, 128, 255, .12),
+    0 0 26px rgba(47, 128, 255, .16);
 }
 
 .deployment-phase.is-current .phase-marker {
   border-color: rgba(248, 251, 255, .78);
-  background: var(--ink);
-  box-shadow: 0 0 0 4px rgba(47, 128, 255, .18), 0 0 24px rgba(47, 128, 255, .42);
+  background: var(--primary);
+  color: var(--canvas);
+  box-shadow:
+    0 0 0 4px rgba(47, 128, 255, .18),
+    0 0 24px rgba(47, 128, 255, .42);
+  animation: lisaDotPulse 1.2s cubic-bezier(.45, 0, .55, 1) infinite alternate;
 }
 
 .deployment-phase.is-current .phase-copy strong {
   color: var(--accent);
+}
+
+.deployment-phase.is-current .phase-state {
+  border-color: rgba(47, 128, 255, .5);
+  color: var(--primary);
 }
 
 .deployment-phase.is-failed .phase-marker {
@@ -1953,17 +2162,60 @@ body.intro-handoff .service-card {
   from {
     border-color: rgba(140, 199, 255, .5);
     box-shadow:
-      0 0 0 1px rgba(47, 128, 255, .14),
-      0 0 18px rgba(47, 128, 255, .1),
-      0 18px 46px rgba(0, 0, 0, .28);
+      0 0 0 1px rgba(47, 128, 255, .26),
+      0 0 28px rgba(47, 128, 255, .24),
+      0 26px 66px rgba(0, 0, 0, .46);
   }
   to {
     border-color: rgba(248, 251, 255, .72);
     box-shadow:
-      0 0 0 1px rgba(140, 199, 255, .32),
-      0 0 28px rgba(47, 128, 255, .28),
-      0 0 54px rgba(140, 199, 255, .16),
-      0 22px 54px rgba(0, 0, 0, .32);
+      0 0 0 1px rgba(140, 199, 255, .5),
+      0 0 48px rgba(47, 128, 255, .42),
+      0 0 92px rgba(140, 199, 255, .25),
+      0 34px 86px rgba(0, 0, 0, .58);
+  }
+}
+
+@keyframes deploymentPanelScan {
+  from {
+    opacity: 0;
+    transform: translateX(-44%);
+  }
+  42% {
+    opacity: .44;
+  }
+  to {
+    opacity: .22;
+    transform: translateX(32%);
+  }
+}
+
+@keyframes deploymentPhaseEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(-14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes deploymentProgressGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(var(--phase-progress, 0));
+  }
+}
+
+@keyframes deploymentProgressSweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }
 
@@ -2342,6 +2594,10 @@ body.intro-handoff .service-card {
     max-width: 20ch;
   }
 
+  .lisa-state-app {
+    font-size: .88rem;
+  }
+
   .lisa-history {
     left: 0;
     right: auto;
@@ -2357,12 +2613,42 @@ body.intro-handoff .service-card {
   }
 
   .dialog-body {
-    padding: 14px;
+    gap: 10px;
+    padding: 12px 14px 14px;
   }
 
   .dialog-header h2 {
     font-size: 1.04rem;
   }
+
+  .deployment-phase {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 7px;
+    min-height: 38px;
+    padding: 5px 6px;
+  }
+
+  .deployment-phases {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .phase-marker {
+    width: 24px;
+    height: 24px;
+    font-size: .62rem;
+  }
+
+  .phase-copy strong {
+    font-size: .82rem;
+  }
+
+  .deployment-phase .phase-state {
+    min-width: 50px;
+    padding: 2px 4px;
+    font-size: .56rem;
+  }
+
   .service-table {
     grid-template-columns: 1fr;
     gap: 10px;

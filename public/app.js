@@ -238,7 +238,7 @@ function renderLisa(lisa) {
 
   const state = document.createElement('span');
   state.className = 'lisa-state';
-  state.textContent = lisaStateText(lisa, status);
+  renderLisaState(state, lisa, status);
 
   const tooltip = document.createElement('div');
   tooltip.className = 'lisa-history';
@@ -280,16 +280,36 @@ function lisaAriaLabel(lisa, status) {
   return 'Lisa en reposo';
 }
 
-function lisaStateText(lisa, status) {
+function renderLisaState(stateEl, lisa, status) {
+  stateEl.replaceChildren();
+
   if (status === 'working') {
-    return `Desplegando: ${lisa.deployment?.phaseLabel || lisa.application || 'despliegue activo'}`;
+    const label = document.createElement('span');
+    label.className = 'lisa-state-label';
+    label.textContent = 'Desplegando:';
+
+    const app = document.createElement('strong');
+    app.className = 'lisa-state-app';
+    app.textContent = lisaDeploymentAppText(lisa);
+
+    const phase = document.createElement('span');
+    phase.className = 'lisa-state-phase';
+    phase.textContent = lisa.deployment?.phaseLabel || 'despliegue en curso';
+
+    stateEl.append(label, app, phase);
+    return;
   }
 
   if (status === 'offline') {
-    return 'Offline';
+    stateEl.textContent = 'Offline';
+    return;
   }
 
-  return 'En reposo';
+  stateEl.textContent = 'En reposo';
+}
+
+function lisaDeploymentAppText(lisa) {
+  return lisa.deployment?.application || lisa.application || 'aplicación';
 }
 
 function renderLisaHistory(lisa) {
@@ -358,8 +378,19 @@ function openLisaDeploymentDialog() {
   }
 
   renderLisaDeploymentDialog(latestLisa);
+  setLisaDialogOrigin();
   lisaDeploymentDialogEl.showModal();
   lisaStatusEl.setAttribute('aria-expanded', 'true');
+}
+
+function setLisaDialogOrigin() {
+  if (!lisaDeploymentDialogEl) {
+    return;
+  }
+
+  const rect = lisaStatusEl.getBoundingClientRect();
+  lisaDeploymentDialogEl.style.setProperty('--origin-x', `${rect.left + rect.width / 2}px`);
+  lisaDeploymentDialogEl.style.setProperty('--origin-y', `${rect.top + rect.height / 2}px`);
 }
 
 function closeLisaDeploymentDialog() {
@@ -378,21 +409,35 @@ function renderLisaDeploymentDialog(lisa) {
   lisaDeploymentBodyEl.replaceChildren();
 
   const deployment = lisa.deployment ?? null;
-  const applicationName = deployment?.application || lisa.application || 'aplicación';
+  const applicationName = lisaDeploymentAppText(lisa);
   const application = document.createElement('p');
   application.className = 'deployment-app';
-  application.textContent = `Desplegando: ${applicationName}`;
+  const applicationLabel = document.createElement('span');
+  applicationLabel.textContent = 'Desplegando';
+  const applicationValue = document.createElement('strong');
+  applicationValue.textContent = applicationName;
+  application.append(applicationLabel, applicationValue);
 
   const phases = normalizeLisaDeploymentPhases(lisa);
+  const currentPhaseIndex = phases.findIndex(phase => phase.status === 'current');
+  const lastDoneIndex = phases.reduce((lastIndex, phase, index) => phase.status === 'done' ? index : lastIndex, -1);
+  const progressIndex = Math.max(0, currentPhaseIndex >= 0 ? currentPhaseIndex : lastDoneIndex);
+  const progress = document.createElement('div');
+  progress.className = 'deployment-progress';
+  progress.setAttribute('aria-hidden', 'true');
+  progress.style.setProperty('--phase-progress', `${phases.length > 1 ? progressIndex / (phases.length - 1) : 1}`);
+
   const list = document.createElement('ol');
   list.className = 'deployment-phases';
 
-  for (const phase of phases) {
+  for (const [index, phase] of phases.entries()) {
     const item = document.createElement('li');
     item.className = `deployment-phase is-${phase.status}`;
+    item.style.setProperty('--phase-index', String(index));
 
     const marker = document.createElement('span');
     marker.className = 'phase-marker';
+    marker.textContent = phase.status === 'done' ? '✓' : String(index + 1);
     marker.setAttribute('aria-hidden', 'true');
 
     const copy = document.createElement('span');
@@ -401,15 +446,22 @@ function renderLisaDeploymentDialog(lisa) {
     const name = document.createElement('strong');
     name.textContent = phase.name;
 
-    const detail = document.createElement('span');
-    detail.textContent = phase.detail || lisaPhaseStatusText(phase.status);
+    const state = document.createElement('span');
+    state.className = 'phase-state';
+    state.textContent = lisaPhaseStatusText(phase.status);
 
-    copy.append(name, detail);
+    copy.append(name);
+    if (phase.detail) {
+      const detail = document.createElement('span');
+      detail.textContent = phase.detail;
+      copy.append(detail);
+    }
     item.append(marker, copy);
+    item.append(state);
     list.append(item);
   }
 
-  lisaDeploymentBodyEl.append(application, list);
+  lisaDeploymentBodyEl.append(application, progress, list);
 }
 
 function normalizeLisaDeploymentPhases(lisa) {
