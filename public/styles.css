@@ -23,7 +23,6 @@
 }
 
 html {
-  overflow-x: hidden;
   background: var(--canvas);
   overflow-x: hidden;
 }
@@ -79,7 +78,7 @@ body::before {
 }
 
 .network-plane {
-  width: 32vw;
+  width: 42vw;
   height: 28vh;
   border: 1px solid rgba(47, 128, 255, .26);
   opacity: .46;
@@ -111,15 +110,15 @@ body::before {
 }
 
 .network-plane-a {
-  left: 6vw;
+  left: -7vw;
   top: 18vh;
   transform: rotateX(60deg) rotateZ(-17deg) translate3d(0, 0, -80px);
 }
 
 .network-plane-b {
-  right: 8vw;
+  right: -10vw;
   bottom: 2vh;
-  width: 32vw;
+  width: 50vw;
   height: 34vh;
   opacity: .22;
   transform: rotateX(58deg) rotateZ(14deg) translate3d(0, 0, -120px);
@@ -141,7 +140,7 @@ body::before {
 }
 
 .network-route::before {
-  content: none;
+  content: "";
   position: absolute;
   top: -2px;
   left: 0;
@@ -253,9 +252,8 @@ body::before {
 }
 
 .network-sweep {
-  left: 0;
   top: -20vh;
-  width: 8vw;
+  width: 34vw;
   height: 140vh;
   border-left: 1px solid rgba(248, 251, 255, .16);
   border-right: 1px solid rgba(47, 128, 255, .18);
@@ -263,20 +261,20 @@ body::before {
     linear-gradient(90deg, transparent, rgba(47, 128, 255, .18), rgba(248, 251, 255, .08), transparent);
   filter: blur(.2px);
   opacity: .7;
-  transform: skewX(-18deg) translateX(0);
+  transform: skewX(-18deg) translateX(-58vw);
   animation: networkSweep 9.5s cubic-bezier(.45, 0, .55, 1) infinite;
 }
 
 .network-sweep-b {
-  width: 6vw;
+  width: 22vw;
   opacity: .48;
   animation-delay: -5.8s;
   animation-duration: 12.5s;
 }
 
 .network-rail {
-  left: 4vw;
-  width: 92vw;
+  left: -12vw;
+  width: 124vw;
   height: 1px;
   background:
     linear-gradient(90deg, transparent, rgba(47, 128, 255, .18), rgba(248, 251, 255, .38), rgba(47, 128, 255, .18), transparent);
@@ -288,10 +286,10 @@ body::before {
 
 .network-rail::before,
 .network-rail::after {
-  content: none;
+  content: "";
   position: absolute;
   top: -3px;
-  width: 60px;
+  width: 120px;
   height: 7px;
   border-radius: 999px;
   background: linear-gradient(90deg, transparent, rgba(140, 199, 255, .86), transparent);
@@ -2107,24 +2105,24 @@ body.intro-handoff .service-card {
 
 @keyframes networkRouteSlide {
   from {
-    translate: 0 0;
+    translate: -3vw 0;
   }
   to {
-    translate: 0 0;
+    translate: 3vw 0;
   }
 }
 
 @keyframes networkPacketTravel {
   0% {
     opacity: 0;
-    transform: translateX(0);
+    transform: translateX(-80px);
   }
   8%, 76% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateX(0);
+    transform: translateX(calc(var(--route-width) + 80px));
   }
 }
 
@@ -2142,7 +2140,7 @@ body.intro-handoff .service-card {
 @keyframes networkSweep {
   0% {
     opacity: 0;
-    transform: skewX(-18deg) translateX(42vw);
+    transform: skewX(-18deg) translateX(-62vw);
   }
   18% {
     opacity: .72;
@@ -2152,20 +2150,20 @@ body.intro-handoff .service-card {
   }
   100% {
     opacity: 0;
-    transform: skewX(-18deg) translateX(42vw);
+    transform: skewX(-18deg) translateX(128vw);
   }
 }
 
 @keyframes networkRailFlow {
   from {
-    translate: 0 0;
+    translate: -5vw 0;
     opacity: .4;
   }
   50% {
     opacity: .78;
   }
   to {
-    translate: 0 0;
+    translate: 5vw 0;
     opacity: .4;
   }
 }
@@ -2173,14 +2171,14 @@ body.intro-handoff .service-card {
 @keyframes networkRailPacket {
   0% {
     opacity: 0;
-    transform: translateX(0);
+    transform: translateX(-140px);
   }
   12%, 76% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateX(0);
+    transform: translateX(124vw);
   }
 }
 
@@ -2281,14 +2279,14 @@ body.intro-handoff .service-card {
 @keyframes lisaSignalSweep {
   0%, 22% {
     opacity: 0;
-    transform: translateX(0);
+    transform: translateX(-76%);
   }
   44% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateX(0);
+    transform: translateX(78%);
   }
 }
 
@@ -2465,46 +2463,46 @@ body.intro-handoff .service-card {
 }
 
 @keyframes adrianPlaneA {
-  0% { transform: translateX(-18vw) skewX(-12deg); }
+  0% { transform: translateX(-110%) skewX(-12deg); }
   38% { transform: translateX(0) skewX(-8deg); }
-  100% { transform: translateX(18vw) skewX(-8deg); }
+  100% { transform: translateX(118%) skewX(-8deg); }
 }
 
 @keyframes adrianPlaneB {
-  0% { transform: translateY(18vh) skewY(-8deg); opacity: 0; }
+  0% { transform: translateY(110%) skewY(-8deg); opacity: 0; }
   32% { transform: translateY(0) skewY(-4deg); opacity: 1; }
-  100% { transform: translateY(-18vh) skewY(-4deg); opacity: 0; }
+  100% { transform: translateY(-118%) skewY(-4deg); opacity: 0; }
 }
 
 @keyframes adrianPlaneC {
-  0% { transform: translateX(18vw) skewX(-14deg); opacity: 0; }
+  0% { transform: translateX(110%) skewX(-14deg); opacity: 0; }
   40% { transform: translateX(0) skewX(-8deg); opacity: 1; }
-  100% { transform: translateX(-18vw) skewX(-8deg); opacity: 0; }
+  100% { transform: translateX(-122%) skewX(-8deg); opacity: 0; }
 }
 
 @keyframes adrianTitleJump {
-  0% { opacity: 0; transform: translate3d(-8vw, 8vh, 0) scale(.72) rotate(-4deg); filter: blur(12px); }
+  0% { opacity: 0; transform: translate3d(-26vw, 18vh, 0) scale(.72) rotate(-4deg); filter: blur(12px); }
   40% { opacity: 1; transform: translate3d(0, -2vh, 0) scale(1.08) rotate(0); filter: blur(0); }
   72% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-  100% { opacity: 0; transform: translate3d(8vw, -8vh, 0) scale(.86) rotate(2deg); filter: blur(6px); }
+  100% { opacity: 0; transform: translate3d(28vw, -20vh, 0) scale(.86) rotate(2deg); filter: blur(6px); }
 }
 
 @keyframes adrianLowerThird {
-  0% { transform: translateX(-18vw); }
+  0% { transform: translateX(-100%); }
   48% { transform: translateX(0); }
-  100% { transform: translateX(18vw); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes rightFrontShell {
   0% {
     opacity: 0;
     filter: blur(18px);
-    transform: translate3d(8vw, 8px, -180px) rotateY(-12deg) scale(.94);
+    transform: translate3d(36vw, 8px, -360px) rotateY(-22deg) scale(.9);
   }
   58% {
     opacity: .78;
     filter: blur(5px);
-    transform: translate3d(2vw, 0, -48px) rotateY(-4deg) scale(.985);
+    transform: translate3d(5vw, 0, -72px) rotateY(-5deg) scale(.985);
   }
   100% {
     opacity: 1;
@@ -2517,12 +2515,12 @@ body.intro-handoff .service-card {
   0% {
     opacity: 0;
     filter: blur(13px);
-    transform: translate3d(6vw, 0, -140px) rotateY(-10deg) scale(.96);
+    transform: translate3d(22vw, 0, -230px) rotateY(-18deg) scale(.94);
   }
   64% {
     opacity: .84;
     filter: blur(3px);
-    transform: translate3d(1.5vw, 0, -32px) rotateY(-3deg) scale(.99);
+    transform: translate3d(3.4vw, 0, -36px) rotateY(-4deg) scale(.99);
   }
   100% {
     opacity: 1;
@@ -2535,12 +2533,12 @@ body.intro-handoff .service-card {
   0% {
     opacity: 0;
     filter: blur(9px);
-    transform: translate3d(5vw, 0, -110px) rotateY(-8deg) scale(.97);
+    transform: translate3d(18vw, 0, -150px) rotateY(-12deg) scale(.965);
   }
   72% {
     opacity: .9;
     filter: blur(2px);
-    transform: translate3d(1vw, 0, -18px) rotateY(-2deg) scale(.995);
+    transform: translate3d(2vw, 0, -20px) rotateY(-2deg) scale(.995);
   }
   100% {
     opacity: 1;
