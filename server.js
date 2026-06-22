@@ -296,8 +296,31 @@ function normalizeActiveDeployment(activeDeployment, progress) {
     updatedAtUtc: getLisaField(progress, 'UpdatedAtUtc', 'updatedAtUtc') ?? null,
     route: getLisaField(progress, 'Route', 'route') ?? null,
     details: getLisaField(progress, 'Details', 'details') ?? null,
-    artifacts: getLisaField(progress, 'Artifacts', 'artifacts') ?? null
+    artifacts: getLisaField(progress, 'Artifacts', 'artifacts') ?? null,
+    phases: normalizeDeploymentPhases(getLisaField(progress, 'Phases', 'phases'), phase)
   };
+}
+
+function normalizeDeploymentPhases(phases, currentPhase) {
+  if (!Array.isArray(phases)) {
+    return [];
+  }
+
+  return phases
+    .map(phase => ({
+      id: getLisaField(phase, 'Id', 'id') ?? '',
+      label: getLisaField(phase, 'Label', 'label') ?? '',
+      status: getLisaField(phase, 'Status', 'status') ?? 'pending'
+    }))
+    .filter(phase => phase.id && phase.label)
+    .map(phase => ({
+      ...phase,
+      status: ['done', 'current', 'pending'].includes(phase.status)
+        ? phase.status
+        : phase.id === currentPhase
+          ? 'current'
+          : 'pending'
+    }));
 }
 
 async function readLisaWatcherControl(stateFilePath) {

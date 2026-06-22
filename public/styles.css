@@ -1041,6 +1041,11 @@ input:focus-visible {
   text-transform: uppercase;
 }
 
+.history-title-secondary {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
 .history-empty {
   margin-top: 10px;
   color: var(--muted);
@@ -1096,6 +1101,78 @@ input:focus-visible {
   min-width: 0;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.lisa-phase-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  border-bottom: 1px solid rgba(203, 213, 225, .1);
+}
+
+.lisa-phase {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 26px;
+  color: var(--muted);
+  font-size: .79rem;
+}
+
+.phase-marker {
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(154, 167, 184, .5);
+  border-radius: 50%;
+  background: rgba(154, 167, 184, .14);
+}
+
+.phase-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phase-state {
+  color: #7c899a;
+  font-size: .68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lisa-phase.is-done .phase-marker {
+  border-color: rgba(67, 214, 151, .72);
+  background: rgba(67, 214, 151, .72);
+  box-shadow: 0 0 12px rgba(67, 214, 151, .24);
+}
+
+.lisa-phase.is-done .phase-label,
+.lisa-phase.is-done .phase-state {
+  color: rgba(214, 226, 241, .82);
+}
+
+.lisa-phase.is-current {
+  color: var(--ink);
+}
+
+.lisa-phase.is-current .phase-marker {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 18px rgba(140, 199, 255, .62);
+  animation: lisaDotPulse 1.2s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+
+.lisa-phase.is-current .phase-label {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.lisa-phase.is-current .phase-state {
+  color: var(--accent);
 }
 
 .status-dot,

@@ -108,7 +108,19 @@ function createLisaWorkingPreview(lisa = {}) {
       application: 'preview-lisa',
       phase: 'post-deploy-agent',
       phaseLabel: 'Verificando con agente',
-      updatedAtUtc: new Date().toISOString()
+      updatedAtUtc: new Date().toISOString(),
+      phases: [
+        { id: 'starting', label: 'Preparando', status: 'done' },
+        { id: 'backup', label: 'Backup de configuración', status: 'done' },
+        { id: 'inspect', label: 'Inspección', status: 'done' },
+        { id: 'database-backup', label: 'Backup de BBDD', status: 'done' },
+        { id: 'manifest', label: 'Manifiesto', status: 'done' },
+        { id: 'compose', label: 'Docker Compose', status: 'done' },
+        { id: 'nginx', label: 'Rutas nginx', status: 'done' },
+        { id: 'restart', label: 'Reconstrucción', status: 'done' },
+        { id: 'post-deploy-agent', label: 'Verificación', status: 'current' },
+        { id: 'complete', label: 'Completado', status: 'pending' }
+      ]
     },
     history: [
       {
@@ -263,7 +275,11 @@ function renderLisaHistory(lisa) {
 
   const title = document.createElement('p');
   title.className = 'history-title';
-  title.textContent = status === 'offline' ? 'Lisa sin conexión' : 'Últimos despliegues';
+  title.textContent = status === 'offline'
+    ? 'Lisa sin conexión'
+    : status === 'working'
+      ? 'Despliegue en curso'
+      : 'Últimos despliegues';
   tooltip.append(title);
 
   if (status === 'offline') {
@@ -274,6 +290,10 @@ function renderLisaHistory(lisa) {
       : 'No se pudo leer el estado local de Lisa.';
     tooltip.append(empty);
     return;
+  }
+
+  if (status === 'working') {
+    renderLisaDeploymentTimeline(tooltip, lisa.deployment);
   }
 
   if (history.length === 0) {
@@ -304,6 +324,51 @@ function renderLisaHistory(lisa) {
     list.append(item);
   }
   tooltip.append(list);
+}
+
+function renderLisaDeploymentTimeline(tooltip, deployment) {
+  const phases = deployment?.phases ?? [];
+  if (phases.length === 0) {
+    const current = document.createElement('p');
+    current.className = 'history-empty';
+    current.textContent = deployment?.phaseLabel || 'Esperando información de fase';
+    tooltip.append(current);
+    return;
+  }
+
+  const list = document.createElement('ol');
+  list.className = 'lisa-phase-list';
+
+  for (const phase of phases) {
+    const item = document.createElement('li');
+    item.className = `lisa-phase is-${phase.status}`;
+
+    const marker = document.createElement('span');
+    marker.className = 'phase-marker';
+    marker.setAttribute('aria-hidden', 'true');
+
+    const label = document.createElement('span');
+    label.className = 'phase-label';
+    label.textContent = phase.label;
+
+    const state = document.createElement('span');
+    state.className = 'phase-state';
+    state.textContent = phase.status === 'done'
+      ? 'Hecha'
+      : phase.status === 'current'
+        ? 'Ahora'
+        : 'Pendiente';
+
+    item.append(marker, label, state);
+    list.append(item);
+  }
+
+  tooltip.append(list);
+
+  const deploymentsTitle = document.createElement('p');
+  deploymentsTitle.className = 'history-title history-title-secondary';
+  deploymentsTitle.textContent = 'Últimos despliegues';
+  tooltip.append(deploymentsTitle);
 }
 
 function startLisaExpressionLoop() {

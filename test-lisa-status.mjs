@@ -101,7 +101,12 @@ test('readLisaStatus prefers structured deployment progress when Lisa writes a p
     Details: 'Eventos disponibles',
     Artifacts: {
       events: 'C:\\dev\\Ilicilabs\\Lisa\\data\\agent-runs\\run.events.jsonl'
-    }
+    },
+    Phases: [
+      { Id: 'starting', Label: 'Preparando', Status: 'done' },
+      { Id: 'post-deploy-agent', Label: 'Verificando con agente', Status: 'current' },
+      { Id: 'complete', Label: 'Completado', Status: 'pending' }
+    ]
   }), 'utf8');
 
   const status = await readLisaStatus({
@@ -116,4 +121,6 @@ test('readLisaStatus prefers structured deployment progress when Lisa writes a p
   assert.equal(status.deployment.phaseLabel, 'Verificando con agente');
   assert.equal(status.deployment.repository, 'oiborram/HomeLabDashboard');
   assert.equal(status.deployment.artifacts.events.endsWith('run.events.jsonl'), true);
+  assert.equal(status.deployment.phases.length, 3);
+  assert.equal(status.deployment.phases[1].status, 'current');
 });
