@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   --canvas: #03050a;
   --surface: #080d18;
@@ -23,6 +23,7 @@
 }
 
 html {
+  overflow-x: hidden;
   background: var(--canvas);
   overflow-x: hidden;
 }
@@ -59,6 +60,8 @@ body::before {
 .line-field {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  max-width: 100vw;
   z-index: 0;
   overflow: hidden;
   contain: paint;
@@ -66,6 +69,7 @@ body::before {
   perspective: 900px;
   opacity: .95;
   mix-blend-mode: screen;
+  contain: layout paint;
 }
 
 .network-plane,
@@ -112,7 +116,7 @@ body::before {
 .network-plane-a {
   left: 6vw;
   top: 18vh;
-  transform: rotateX(60deg) rotateZ(-17deg) translate3d(0, 0, -80px);
+  transform: translate3d(0, 0, -80px);
 }
 
 .network-plane-b {
@@ -121,7 +125,7 @@ body::before {
   width: 32vw;
   height: 34vh;
   opacity: .22;
-  transform: rotateX(58deg) rotateZ(14deg) translate3d(0, 0, -120px);
+  transform: translate3d(0, 0, -120px);
   animation-delay: -7s;
 }
 
@@ -486,9 +490,11 @@ input:focus-visible {
   position: relative;
   z-index: 1;
   align-self: end;
-  display: flex;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
   align-items: center;
-  min-width: 244px;
+  min-width: 360px;
+  max-width: min(460px, calc(100vw - 32px));
   min-height: 102px;
   gap: 14px;
   padding: 14px;
@@ -498,7 +504,6 @@ input:focus-visible {
   white-space: nowrap;
   overflow: visible;
   isolation: isolate;
-  animation: lisaPanelLive 4.8s cubic-bezier(.45, 0, .55, 1) infinite alternate;
 }
 
 .status-panel::before,
@@ -537,6 +542,7 @@ input:focus-visible {
 .status-panel.deploying {
   border-color: rgba(140, 199, 255, .78);
   color: var(--ink);
+  animation: lisaDeployPanelPulse 2.6s cubic-bezier(.45, 0, .55, 1) infinite alternate;
 }
 
 .lisa-bot {
@@ -744,27 +750,28 @@ input:focus-visible {
 }
 
 .lisa-bot.is-laughing .lisa-eye {
-  top: 21px;
-  width: 18px;
-  height: 17px;
+  top: 17px;
+  width: 13px;
+  height: 23px;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  transform: translate3d(0, 0, 0);
 }
 
 .lisa-bot.is-laughing .lisa-eye-left {
-  left: 15px;
+  left: 21px;
 }
 
 .lisa-bot.is-laughing .lisa-eye-right {
-  right: 15px;
+  right: 21px;
 }
 
 .lisa-bot.is-laughing .lisa-eye::before,
 .lisa-bot.is-laughing .lisa-eye::after {
   content: "";
   position: absolute;
-  top: 8px;
+  top: 5px;
   width: 10px;
   height: 4px;
   border-radius: 999px;
@@ -774,15 +781,15 @@ input:focus-visible {
 
 .lisa-bot.is-laughing .lisa-eye-left::before,
 .lisa-bot.is-laughing .lisa-eye-right::before {
-  left: 1px;
-  transform: rotate(34deg);
+  left: 0;
+  transform: rotate(-34deg);
   transform-origin: right center;
 }
 
 .lisa-bot.is-laughing .lisa-eye-left::after,
 .lisa-bot.is-laughing .lisa-eye-right::after {
-  right: 1px;
-  transform: rotate(-34deg);
+  right: 0;
+  transform: rotate(34deg);
   transform-origin: left center;
 }
 
@@ -791,8 +798,10 @@ input:focus-visible {
 }
 
 .status-panel.is-working .lisa-eye {
-  width: 12px;
-  height: 20px;
+  top: 18px;
+  width: 13px;
+  height: 18px;
+  border-radius: 999px;
   opacity: .96;
   transform: translate3d(var(--look-x), -1px, 0);
 }
@@ -801,18 +810,19 @@ input:focus-visible {
   opacity: .62;
 }
 
-.status-panel.is-working .lisa-mouth {
-  bottom: 13px;
-  width: 34px;
-  height: 11px;
-  border-bottom-width: 3px;
+.status-panel.is-working .lisa-bot:not(.is-smiling-wide):not(.is-laughing) .lisa-mouth {
+  bottom: 14px;
+  width: 32px;
+  height: 12px;
+  border-bottom-width: 4px;
+  border-radius: 0 0 999px 999px;
   opacity: .92;
 }
 
 .status-panel.is-working .lisa-work-pulse {
-  opacity: .82;
-  transform: translateX(-50%) scale(1);
-  animation: lisaWorkingDots 1.4s linear infinite;
+  opacity: 0;
+  transform: translateX(-50%) scale(.92);
+  animation: none;
 }
 
 .lisa-bot.is-smiling-wide .lisa-cheek {
@@ -822,7 +832,7 @@ input:focus-visible {
 
 .lisa-bot.is-wink-left .lisa-eye-left,
 .lisa-bot.is-wink-right .lisa-eye-right {
-  width: 20px;
+  width: 16px;
   height: 5px;
   transform: translate3d(var(--look-x), calc(var(--look-y) + 4px), 0);
   background: rgba(248, 251, 255, .8);
@@ -840,16 +850,17 @@ input:focus-visible {
   transform: translate3d(calc(var(--look-x) + 1px), var(--look-y), 0);
 }
 
-.lisa-bot.is-sleepy .lisa-eye {
-  height: 6px;
-  transform: translate3d(var(--look-x), calc(var(--look-y) + 4px), 0);
-  opacity: .82;
+.lisa-bot.is-soft-glow .lisa-face {
+  transform: translate3d(0, -.4px, 0) scale(1.006);
 }
 
-.lisa-bot.is-sleepy .lisa-mouth {
-  width: 34px;
-  height: 11px;
-  opacity: .86;
+.lisa-bot.is-soft-glow .lisa-eye {
+  filter: brightness(1.18);
+  transform: translate3d(var(--look-x), calc(var(--look-y) - .5px), 0);
+}
+
+.lisa-bot.is-soft-glow .lisa-cheek {
+  opacity: .72;
 }
 
 .lisa-bot.is-happy-hop .lisa-face {
@@ -879,12 +890,13 @@ input:focus-visible {
 }
 
 .lisa-state {
-  max-width: 18ch;
-  overflow: hidden;
+  max-width: 100%;
   color: var(--muted);
   font-size: .8rem;
   font-weight: 750;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .status-panel.is-live {
@@ -915,7 +927,9 @@ input:focus-visible {
 }
 
 .status-panel.is-live .lisa-eye {
-  animation: lisaLiveEyes 1s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+  opacity: 1;
+  background-color: rgba(248, 251, 255, .92);
+  box-shadow: 0 0 18px rgba(140, 199, 255, .82);
 }
 
 .status-panel.is-live .lisa-mouth {
@@ -1001,21 +1015,21 @@ input:focus-visible {
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  z-index: 10;
+  z-index: 20;
   display: none;
-  width: min(360px, calc(100vw - 32px));
+  gap: 8px;
+  width: min(390px, calc(100vw - 32px));
+  min-width: 0;
   padding: 14px;
-  border: 1px solid rgba(203, 213, 225, .2);
-  background: rgba(3, 5, 10, .98);
-  box-shadow: 0 22px 52px rgba(0, 0, 0, .5);
+  border: 1px solid rgba(203, 213, 225, .18);
+  background: rgba(3, 5, 10, .96);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .42);
   color: var(--ink);
   white-space: normal;
 }
 
-.status-panel:hover .lisa-history,
-.status-panel:focus .lisa-history,
-.status-panel:focus-within .lisa-history {
-  display: block;
+.status-panel:hover .lisa-history {
+  display: grid;
 }
 
 .history-title,
@@ -1030,6 +1044,11 @@ input:focus-visible {
   text-transform: uppercase;
 }
 
+.history-title-secondary {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
 .history-empty {
   margin-top: 10px;
   color: var(--muted);
@@ -1038,25 +1057,125 @@ input:focus-visible {
 
 .lisa-history ol {
   display: grid;
-  gap: 10px;
-  margin: 12px 0 0;
+  gap: 8px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .lisa-history li {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 34px;
+  padding: 7px 0;
+  border-top: 1px solid rgba(203, 213, 225, .08);
   color: var(--muted);
   font-size: .84rem;
   line-height: 1.25;
 }
 
+.lisa-history li:first-child {
+  border-top: 0;
+}
+
 .lisa-history time {
-  color: var(--warning);
+  display: grid;
+  gap: 2px;
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: .78rem;
+  line-height: 1;
+}
+
+.history-date {
+  color: var(--accent);
+  font-size: .7rem;
+  font-weight: 850;
+}
+
+.history-clock {
+  color: var(--ink);
+  font-size: .88rem;
+  font-weight: 950;
+  text-shadow: 0 0 14px rgba(140, 199, 255, .38);
+}
+
+.history-message {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.lisa-phase-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  border-bottom: 1px solid rgba(203, 213, 225, .1);
+}
+
+.lisa-phase {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 26px;
+  color: var(--muted);
+  font-size: .79rem;
+}
+
+.phase-marker {
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(154, 167, 184, .5);
+  border-radius: 50%;
+  background: rgba(154, 167, 184, .14);
+}
+
+.phase-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phase-state {
+  color: #7c899a;
+  font-size: .68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lisa-phase.is-done .phase-marker {
+  border-color: rgba(67, 214, 151, .72);
+  background: rgba(67, 214, 151, .72);
+  box-shadow: 0 0 12px rgba(67, 214, 151, .24);
+}
+
+.lisa-phase.is-done .phase-label,
+.lisa-phase.is-done .phase-state {
+  color: rgba(214, 226, 241, .82);
+}
+
+.lisa-phase.is-current {
+  color: var(--ink);
+}
+
+.lisa-phase.is-current .phase-marker {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 18px rgba(140, 199, 255, .62);
+  animation: lisaDotPulse 1.2s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+
+.lisa-phase.is-current .phase-label {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.lisa-phase.is-current .phase-state {
+  color: var(--accent);
 }
 
 .lisa-deployment-dialog {
@@ -1830,14 +1949,21 @@ body.intro-handoff .service-card {
   }
 }
 
-@keyframes lisaPanelLive {
+@keyframes lisaDeployPanelPulse {
   from {
-    border-color: rgba(184, 196, 214, .22);
-    box-shadow: 0 0 0 rgba(47, 128, 255, 0);
+    border-color: rgba(140, 199, 255, .5);
+    box-shadow:
+      0 0 0 1px rgba(47, 128, 255, .14),
+      0 0 18px rgba(47, 128, 255, .1),
+      0 18px 46px rgba(0, 0, 0, .28);
   }
   to {
-    border-color: rgba(47, 128, 255, .58);
-    box-shadow: 0 0 34px rgba(47, 128, 255, .18);
+    border-color: rgba(248, 251, 255, .72);
+    box-shadow:
+      0 0 0 1px rgba(140, 199, 255, .32),
+      0 0 28px rgba(47, 128, 255, .28),
+      0 0 54px rgba(140, 199, 255, .16),
+      0 22px 54px rgba(0, 0, 0, .32);
   }
 }
 
@@ -2003,19 +2129,6 @@ body.intro-handoff .service-card {
   }
 }
 
-@keyframes lisaLiveEyes {
-  from {
-    opacity: .72;
-    background-color: rgba(140, 199, 255, .78);
-    box-shadow: 0 0 10px rgba(140, 199, 255, .44);
-  }
-  to {
-    opacity: 1;
-    background-color: rgba(248, 251, 255, .92);
-    box-shadow: 0 0 18px rgba(140, 199, 255, .82);
-  }
-}
-
 @keyframes lisaAntennaLive {
   from {
     opacity: .62;
@@ -2162,7 +2275,9 @@ body.intro-handoff .service-card {
 
   .status-panel {
     justify-self: start;
-    width: min(100%, 320px);
+    grid-template-columns: 58px minmax(0, 1fr);
+    width: min(100%, 380px);
+    min-width: 0;
     min-height: 82px;
     padding: 10px;
   }
@@ -2192,6 +2307,25 @@ body.intro-handoff .service-card {
 
   .lisa-eye-right {
     right: 17px;
+  }
+
+  .lisa-bot.is-laughing .lisa-eye {
+    top: 12px;
+    width: 10px;
+    height: 18px;
+  }
+
+  .lisa-bot.is-laughing .lisa-eye-left {
+    left: 17px;
+  }
+
+  .lisa-bot.is-laughing .lisa-eye-right {
+    right: 17px;
+  }
+
+  .lisa-bot.is-laughing .lisa-eye::before,
+  .lisa-bot.is-laughing .lisa-eye::after {
+    width: 7px;
   }
 
   .lisa-cheek {
@@ -2229,7 +2363,6 @@ body.intro-handoff .service-card {
   .dialog-header h2 {
     font-size: 1.04rem;
   }
-
   .service-table {
     grid-template-columns: 1fr;
     gap: 10px;

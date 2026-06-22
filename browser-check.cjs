@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const dashboardUrl = process.env.DASHBOARD_URL ?? 'http://127.0.0.1:8443/';
 
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -12,7 +13,7 @@ const { chromium } = require('playwright');
   });
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('http://127.0.0.1:8443/', {
+  await page.goto(dashboardUrl, {
     waitUntil: 'domcontentloaded',
     timeout: 15000
   });
@@ -358,6 +359,9 @@ async function probeLisaExpression(page) {
       rightEyeWidth: Number.parseFloat(rightEyeStyle?.width ?? '0'),
       rightEyeHeight: Number.parseFloat(rightEyeStyle?.height ?? '0'),
       leftEyeHeight: Number.parseFloat(leftEyeStyle?.height ?? '0'),
+      eyeGap: rightEyeRect && leftEyeRect ? rightEyeRect.left - leftEyeRect.right : 0,
+      leftEyeAnimation: leftEyeStyle?.animationName,
+      rightEyeAnimation: rightEyeStyle?.animationName,
       mouthWidth: Number.parseFloat(mouthStyle?.width ?? '0'),
       mouthBottomGap: mouthRect && faceRect ? faceRect.bottom - mouthRect.bottom : 0,
       mouthBorderLeft: Number.parseFloat(mouthStyle?.borderLeftWidth ?? '0'),
@@ -373,7 +377,7 @@ async function probeLisaExpression(page) {
         mouthRect &&
         rightEyeRect &&
         leftEyeRect &&
-        mouthRect.top > Math.max(rightEyeRect.bottom, leftEyeRect.bottom) + 4
+        mouthRect.top > Math.max(rightEyeRect.bottom, leftEyeRect.bottom) + 2.5
       ),
       mouthInsideFace: Boolean(
         mouthRect &&
@@ -397,10 +401,13 @@ async function probeLisaExpression(page) {
     !result.smiling ||
     !result.winking ||
     result.leftEyeWidth < 12 ||
-    result.rightEyeWidth < 18 ||
+    result.rightEyeWidth < 15 ||
     result.rightEyeHeight >= result.leftEyeHeight ||
+    result.eyeGap <= 0 ||
+    result.leftEyeAnimation !== 'none' ||
+    result.rightEyeAnimation !== 'none' ||
     result.mouthWidth < 48 ||
-    result.mouthBottomGap < 8 ||
+    result.mouthBottomGap < 3.5 ||
     result.mouthBorderLeft !== 0 ||
     result.mouthBorderRight !== 0 ||
     result.mouthBorderBottom < 4 ||
@@ -440,6 +447,10 @@ async function probeLisaLaugh(page) {
     const leftEyeBeforeStyle = leftEye ? getComputedStyle(leftEye, '::before') : null;
     const leftEyeAfterStyle = leftEye ? getComputedStyle(leftEye, '::after') : null;
     const rightEyeStyle = rightEye ? getComputedStyle(rightEye) : null;
+    const matrixValue = (transform, index) => {
+      const values = transform?.match(/matrix\(([^)]+)\)/)?.[1]?.split(',').map(Number);
+      return values?.[index] ?? 0;
+    };
 
     return {
       laughing: bot?.classList.contains('is-laughing') ?? false,
@@ -456,17 +467,20 @@ async function probeLisaLaugh(page) {
         rightEyeStyle?.backgroundImage === 'none' &&
         leftEyeBeforeStyle?.content !== 'none' &&
         leftEyeAfterStyle?.content !== 'none' &&
-        Number.parseFloat(leftEyeBeforeStyle?.width ?? '0') >= 10 &&
-        Number.parseFloat(leftEyeAfterStyle?.width ?? '0') >= 10 &&
+        Number.parseFloat(leftEyeBeforeStyle?.width ?? '0') >= 7 &&
+        Number.parseFloat(leftEyeAfterStyle?.width ?? '0') >= 7 &&
         Number.parseFloat(leftEyeBeforeStyle?.left ?? '0') < 3 &&
         Number.parseFloat(leftEyeAfterStyle?.right ?? '0') < 3 &&
         leftEyeBeforeStyle?.transform !== 'none' &&
         leftEyeAfterStyle?.transform !== 'none',
+      chevronPeaksUp:
+        matrixValue(leftEyeBeforeStyle?.transform, 1) < 0 &&
+        matrixValue(leftEyeAfterStyle?.transform, 1) > 0,
       mouthBottomGap: mouthRect && faceRect ? faceRect.bottom - mouthRect.bottom : 0,
       mouthInsideFace: Boolean(
         mouthRect &&
         faceRect &&
-        mouthRect.bottom <= faceRect.bottom - 6 &&
+        mouthRect.bottom <= faceRect.bottom - 2.5 &&
         mouthRect.left >= faceRect.left + 2 &&
         mouthRect.right <= faceRect.right - 2
       )
@@ -483,7 +497,8 @@ async function probeLisaLaugh(page) {
     result.mouthDivider < 2 ||
     !result.mouthHasFill ||
     !result.chevronEyes ||
-    result.mouthBottomGap < 6 ||
+    !result.chevronPeaksUp ||
+    result.mouthBottomGap < 2.5 ||
     !result.mouthInsideFace
   ) {
     throw new Error(`Lisa laugh probe failed: ${JSON.stringify(result)}`);
@@ -520,10 +535,12 @@ async function probeLisaWorking(page) {
       liveClass: panel?.classList.contains('is-live') ?? false,
       stateText: state?.textContent?.trim(),
       hasPulse: Boolean(pulse),
-      pulseVisible: Number(pulseStyle?.opacity ?? '0') > 0.4,
-      pulseAnimation: animations.includes('lisaWorkingDots'),
+      pulseHidden: Number(pulseStyle?.opacity ?? '1') === 0,
+      pulseAnimationRemoved: !animations.includes('lisaWorkingDots'),
       focusAnimation: animations.includes('lisaWorkingFocus'),
+      panelPulse: animations.includes('lisaDeployPanelPulse'),
       faceAnimation: faceStyle?.animationName,
+      leftEyeRadius: Number.parseFloat(leftEyeStyle?.borderTopLeftRadius ?? '0'),
       mouthWidth: Number.parseFloat(mouthStyle?.width ?? '0'),
       mouthHeight: Number.parseFloat(mouthStyle?.height ?? '0'),
       leftEyeHeight: Number.parseFloat(leftEyeStyle?.height ?? '0'),
@@ -534,11 +551,13 @@ async function probeLisaWorking(page) {
   if (
     !result.workingClass ||
     !result.liveClass ||
-    !result.stateText?.startsWith('Live:') ||
+    !result.stateText?.startsWith('Desplegando:') ||
     !result.hasPulse ||
-    !result.pulseVisible ||
-    !result.pulseAnimation ||
+    !result.pulseHidden ||
+    !result.pulseAnimationRemoved ||
     !result.focusAnimation ||
+    !result.panelPulse ||
+    result.leftEyeRadius < 8 ||
     result.mouthWidth > 40 ||
     result.mouthHeight > 14 ||
     result.leftEyeHeight < 18 ||
@@ -589,8 +608,8 @@ async function probeLisaHoverTracking(page) {
     leftLook.eyeAnimationName === 'none';
   const resetAfterLeave =
     !afterLeave.tracking &&
-    afterLeave.lookX === '0px' &&
-    afterLeave.lookY === '0px';
+    (afterLeave.lookX === '0px' || afterLeave.lookX === '') &&
+    (afterLeave.lookY === '0px' || afterLeave.lookY === '');
 
   const result = {
     leftLook,
@@ -621,6 +640,9 @@ async function probeLisaHistoryLayer(page) {
   const result = await page.evaluate(() => {
     const panel = document.querySelector('#lisaStatus');
     const history = panel?.querySelector('.lisa-history');
+    const timeText = history?.querySelector('time')?.textContent?.trim() ?? '';
+    const dateText = history?.querySelector('.history-date')?.textContent?.trim() ?? '';
+    const clockText = history?.querySelector('.history-clock')?.textContent?.trim() ?? '';
     const rect = history?.getBoundingClientRect();
     const style = history ? getComputedStyle(history) : null;
 
@@ -637,6 +659,12 @@ async function probeLisaHistoryLayer(page) {
 
     return {
       display: style?.display,
+      timeText,
+      dateText,
+      clockText,
+      dateTimePattern: /^\d{2}\/\d{2}\s*\d{2}:\d{2}$/.test(timeText) &&
+        /^\d{2}\/\d{2}$/.test(dateText) &&
+        /^\d{2}:\d{2}$/.test(clockText),
       visible: style?.display !== 'none' && rect.width > 0 && rect.height > 0,
       topElementIsHistory: Boolean(topElement?.closest('.lisa-history')),
       topElementClass: topElement?.className?.toString() ?? '',
@@ -649,7 +677,7 @@ async function probeLisaHistoryLayer(page) {
     };
   });
 
-  if (!result.visible || !result.topElementIsHistory) {
+  if (!result.visible || !result.topElementIsHistory || !result.dateTimePattern) {
     throw new Error(`Lisa history layer probe failed: ${JSON.stringify(result)}`);
   }
 

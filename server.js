@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+export { app };
 const port = Number(process.env.PORT ?? 3000);
 const nginxConfigPath = process.env.NGINX_CONFIG_PATH ?? '/app/config/default.conf';
 const npmProxyHostDir = process.env.NPM_PROXY_HOST_DIR ?? '/app/npm-proxy-hosts';
@@ -17,6 +18,10 @@ const lisaActiveDeploymentPath =
   process.env.LISA_ACTIVE_DEPLOYMENT_PATH ??
   process.env.LISA_DEPLOYING_PATH ??
   '/app/lisa-data/deploying.txt';
+const lisaDeploymentStatusPath =
+  process.env.LISA_DEPLOYMENT_STATUS_PATH ??
+  process.env.Lisa__DeploymentStatusPath ??
+  '/app/lisa-data/deployment-status.json';
 const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
 
 app.get('/assets/*', proxyLegacyAsset);
@@ -44,6 +49,14 @@ app.get('/health', (_request, response) => {
   response.json({ ok: true });
 });
 
+app.get('*', (request, response, next) => {
+  if (!request.accepts('html')) {
+    next();
+    return;
+  }
+
+  response.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   app.listen(port, () => {
     console.log(`HomeLabDashboard listening on ${port}`);
@@ -156,9 +169,11 @@ async function readPublicHosts() {
 export async function readLisaStatus(options = {}) {
   const stateFilePath = options.stateFilePath ?? lisaStateFilePath;
   const activeDeploymentPath = options.activeDeploymentPath ?? lisaActiveDeploymentPath;
-  const [stateResult, activeDeployment] = await Promise.all([
+  const deploymentStatusPath = options.deploymentStatusPath ?? lisaDeploymentStatusPath;
+  const [stateResult, activeDeployment, activeProgress] = await Promise.all([
     readLisaDeploymentState(stateFilePath),
-    readActiveLisaDeployment(activeDeploymentPath)
+    readActiveLisaDeployment(activeDeploymentPath),
+    readLisaDeploymentProgress(deploymentStatusPath)
   ]);
   const watcher = await readLisaWatcherControl(stateFilePath);
 
@@ -170,6 +185,7 @@ export async function readLisaStatus(options = {}) {
       application: null,
       reason: stateResult.reason,
       stateFilePath,
+      deploymentStatusPath,
       watcher,
       repositories: [],
       history: []
@@ -178,18 +194,20 @@ export async function readLisaStatus(options = {}) {
 
   const repositories = normalizeLisaRepositories(stateResult.state);
   const history = buildLisaHistory(repositories);
-  const deploying = Boolean(activeDeployment);
-  const activeDeploymentDetails = normalizeActiveLisaDeployment(activeDeployment);
+  const deployment = normalizeActiveDeployment(activeDeployment, activeProgress);
+  const deploying = Boolean(deployment);
 
   return {
     status: deploying ? 'working' : 'idle',
     available: true,
     deploying,
-    application: activeDeploymentDetails.application,
-    deploymentPhases: activeDeploymentDetails.phases,
-    currentDeployment: deploying ? activeDeploymentDetails : null,
+    application: deployment?.application ?? null,
+    deployment,
+    deploymentPhases: deployment?.phases ?? [],
+    currentDeployment: deployment,
     reason: null,
     stateFilePath,
+    deploymentStatusPath,
     watcher,
     repositories: repositories.map(repository => ({
       fullName: repository.fullName,
@@ -201,7 +219,6 @@ export async function readLisaStatus(options = {}) {
     history
   };
 }
-
 async function readLisaDeploymentState(stateFilePath) {
   try {
     const content = (await fs.readFile(stateFilePath, 'utf8')).replace(/^\uFEFF/u, '');
@@ -256,90 +273,113 @@ async function readActiveLisaDeployment(activeDeploymentPath) {
   }
 }
 
-function normalizeActiveLisaDeployment(activeDeployment) {
-  if (!activeDeployment) {
-    return {
-      application: null,
-      phases: []
-    };
+async function readLisaDeploymentProgress(deploymentStatusPath) {
+  try {
+    const content = (await fs.readFile(deploymentStatusPath, 'utf8')).replace(/^\uFEFF/u, '');
+    return JSON.parse(content);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) {
+      return null;
+    }
+
+    return null;
+  }
+}
+
+function normalizeActiveDeployment(activeDeployment, progress) {
+  if (!activeDeployment && !progress) {
+    return null;
   }
 
-  if (typeof activeDeployment === 'string') {
-    return {
-      application: activeDeployment,
-      phases: []
-    };
-  }
-
-  if (typeof activeDeployment !== 'object') {
-    return {
-      application: 'despliegue activo',
-      phases: []
-    };
-  }
+  const source = progress && typeof progress === 'object'
+    ? progress
+    : activeDeployment && typeof activeDeployment === 'object'
+      ? activeDeployment
+      : null;
+  const application =
+    getLisaField(source, 'Application', 'application') ??
+    getLisaField(source, 'App', 'app') ??
+    getLisaField(source, 'Name', 'name') ??
+    (typeof activeDeployment === 'string' ? activeDeployment : 'despliegue activo');
+  const phase = getLisaField(source, 'Phase', 'phase') ?? 'deploying';
+  const phaseLabel = getLisaField(source, 'PhaseLabel', 'phaseLabel') ?? 'Despliegue en curso';
+  const phases =
+    getLisaField(source, 'Phases', 'phases') ??
+    getLisaField(source, 'Steps', 'steps') ??
+    [];
 
   return {
-    application:
-      getLisaField(activeDeployment, 'Application', 'application') ??
-      getLisaField(activeDeployment, 'App', 'app') ??
-      getLisaField(activeDeployment, 'Name', 'name') ??
-      'despliegue activo',
-    phases: normalizeLisaDeploymentPhases(
-      getLisaField(activeDeployment, 'Phases', 'phases') ??
-      getLisaField(activeDeployment, 'Steps', 'steps') ??
-      []
-    )
+    application,
+    repository: getLisaField(source, 'Repository', 'repository') ?? null,
+    commitSha: getLisaField(source, 'CommitSha', 'commitSha') ?? null,
+    phase,
+    phaseLabel,
+    startedAtUtc: getLisaField(source, 'StartedAtUtc', 'startedAtUtc') ?? null,
+    updatedAtUtc: getLisaField(source, 'UpdatedAtUtc', 'updatedAtUtc') ?? null,
+    route: getLisaField(source, 'Route', 'route') ?? null,
+    details: getLisaField(source, 'Details', 'details') ?? null,
+    artifacts: getLisaField(source, 'Artifacts', 'artifacts') ?? null,
+    phases: normalizeDeploymentPhases(phases, phase)
   };
 }
 
-function normalizeLisaDeploymentPhases(phases) {
+function normalizeDeploymentPhases(phases, currentPhase) {
   if (!Array.isArray(phases)) {
     return [];
   }
 
-  return phases.map((phase, index) => {
-    if (typeof phase === 'string') {
-      return {
-        name: phase,
-        status: index === 0 ? 'current' : 'pending',
-        detail: ''
-      };
-    }
+  return phases
+    .map((phase, index) => {
+      if (typeof phase === 'string') {
+        return {
+          id: `phase-${index + 1}`,
+          label: phase,
+          name: phase,
+          status: index === 0 ? 'current' : 'pending',
+          detail: ''
+        };
+      }
 
-    if (!phase || typeof phase !== 'object') {
-      return {
-        name: `Fase ${index + 1}`,
-        status: 'pending',
-        detail: ''
-      };
-    }
+      if (!phase || typeof phase !== 'object') {
+        return {
+          id: `phase-${index + 1}`,
+          label: `Fase ${index + 1}`,
+          name: `Fase ${index + 1}`,
+          status: 'pending',
+          detail: ''
+        };
+      }
 
-    return {
-      name:
+      const id = getLisaField(phase, 'Id', 'id') ?? `phase-${index + 1}`;
+      const label =
+        getLisaField(phase, 'Label', 'label') ??
         getLisaField(phase, 'Name', 'name') ??
         getLisaField(phase, 'Title', 'title') ??
-        getLisaField(phase, 'Label', 'label') ??
-        `Fase ${index + 1}`,
-      status: normalizeLisaPhaseStatus(
-        getLisaField(phase, 'Status', 'status') ??
-        getLisaField(phase, 'State', 'state')
-      ),
-      detail:
-        getLisaField(phase, 'Detail', 'detail') ??
-        getLisaField(phase, 'Description', 'description') ??
-        getLisaField(phase, 'Message', 'message') ??
-        ''
-    };
-  });
+        `Fase ${index + 1}`;
+      const rawStatus = getLisaField(phase, 'Status', 'status') ?? getLisaField(phase, 'State', 'state');
+
+      return {
+        id,
+        label,
+        name: label,
+        status: normalizeDeploymentPhaseStatus(rawStatus, id, currentPhase),
+        detail:
+          getLisaField(phase, 'Detail', 'detail') ??
+          getLisaField(phase, 'Description', 'description') ??
+          getLisaField(phase, 'Message', 'message') ??
+          ''
+      };
+    })
+    .filter(phase => phase.id && phase.label);
 }
 
-function normalizeLisaPhaseStatus(status) {
+function normalizeDeploymentPhaseStatus(status, id, currentPhase) {
   const value = String(status ?? '').toLowerCase();
   if (['done', 'completed', 'complete', 'success', 'hecha'].includes(value)) {
     return 'done';
   }
 
-  if (['current', 'active', 'running', 'in_progress', 'now', 'ahora'].includes(value)) {
+  if (['current', 'active', 'running', 'in_progress', 'now', 'ahora'].includes(value) || id === currentPhase) {
     return 'current';
   }
 
@@ -349,7 +389,6 @@ function normalizeLisaPhaseStatus(status) {
 
   return 'pending';
 }
-
 async function readLisaWatcherControl(stateFilePath) {
   const directory = path.dirname(stateFilePath);
   const pidFilePath = path.join(directory, 'lisa-watcher.pid');
@@ -528,14 +567,10 @@ function inferOrigin(config, locationStart) {
 
 function buildServiceUrl(_request, routePath, kind) {
   if (kind === 'API') {
-    if (routePath === '/api/') {
-      return appendPath(routePath, 'swagger/index.html');
-    }
-
-    return appendPath(routePath, 'openapi/v1.json');
+    return appendPath(routePath, 'swagger/index.html');
   }
 
-  return routePath;
+  return routePath.endsWith('/') ? routePath : `${routePath}/`;
 }
 
 function appendPath(routePath, segment) {

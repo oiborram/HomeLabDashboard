@@ -1,4 +1,4 @@
-const servicesEl = document.querySelector('#services');
+﻿const servicesEl = document.querySelector('#services');
 const emptyEl = document.querySelector('#empty');
 const searchEl = document.querySelector('#search');
 const summaryEl = document.querySelector('#summary');
@@ -35,7 +35,7 @@ const lisaExpressionClasses = [
   'is-wink-left',
   'is-wink-right',
   'is-curious',
-  'is-sleepy',
+  'is-soft-glow',
   'is-happy-hop',
   'is-listening',
   'is-laughing'
@@ -47,7 +47,7 @@ const lisaLooks = [
   { x: '0px', y: '-2px', classes: ['is-curious'], duration: 1450 },
   { x: '-2px', y: '1px', wink: 'left', classes: ['is-smiling-wide'], duration: 1150 },
   { x: '2px', y: '1px', wink: 'right', classes: ['is-smiling-wide'], duration: 1150 },
-  { x: '0px', y: '2px', classes: ['is-sleepy'], duration: 1500 },
+  { x: '0px', y: '-1px', classes: ['is-soft-glow'], duration: 1450 },
   { x: '0px', y: '-1px', classes: ['is-happy-hop', 'is-smiling-wide'], duration: 1300 },
   { x: '0px', y: '-1px', classes: ['is-laughing'], duration: 1500 }
 ];
@@ -112,6 +112,24 @@ function createLisaWorkingPreview(lisa = {}) {
       { name: 'Inspección', status: 'current', detail: 'Compatibilidad de datos' },
       { name: 'Reconstrucción', status: 'pending', detail: 'Pendiente de ejecución' }
     ],
+    deployment: {
+      application: 'preview-lisa',
+      phase: 'post-deploy-agent',
+      phaseLabel: 'Verificando con agente',
+      updatedAtUtc: new Date().toISOString(),
+      phases: [
+        { id: 'starting', label: 'Preparando', status: 'done' },
+        { id: 'backup', label: 'Backup de configuración', status: 'done' },
+        { id: 'inspect', label: 'Inspección', status: 'done' },
+        { id: 'database-backup', label: 'Backup de BBDD', status: 'done' },
+        { id: 'manifest', label: 'Manifiesto', status: 'done' },
+        { id: 'compose', label: 'Docker Compose', status: 'done' },
+        { id: 'nginx', label: 'Rutas nginx', status: 'done' },
+        { id: 'restart', label: 'Reconstrucción', status: 'done' },
+        { id: 'post-deploy-agent', label: 'Verificación', status: 'current' },
+        { id: 'complete', label: 'Completado', status: 'pending' }
+      ]
+    },
     history: [
       {
         timestamp: new Date().toISOString(),
@@ -250,7 +268,9 @@ function renderLisa(lisa) {
 
 function lisaAriaLabel(lisa, status) {
   if (status === 'working') {
-    return `Lisa live, desplegando ${lisa.application || 'aplicación'}. Abrir fases del despliegue actual.`;
+    const application = lisa.deployment?.application || lisa.application || 'aplicación';
+    const phase = lisa.deployment?.phaseLabel || 'despliegue en curso';
+    return `Lisa desplegando ${application}: ${phase}. Abrir fases del despliegue actual.`;
   }
 
   if (status === 'offline') {
@@ -262,7 +282,7 @@ function lisaAriaLabel(lisa, status) {
 
 function lisaStateText(lisa, status) {
   if (status === 'working') {
-    return `Live: ${lisa.application || 'despliegue activo'}`;
+    return `Desplegando: ${lisa.deployment?.phaseLabel || lisa.application || 'despliegue activo'}`;
   }
 
   if (status === 'offline') {
@@ -302,12 +322,20 @@ function renderLisaHistory(lisa) {
   }
 
   const list = document.createElement('ol');
-  for (const event of history.slice(0, 6)) {
+  for (const event of history.slice(0, 3)) {
     const item = document.createElement('li');
     const time = document.createElement('time');
     time.dateTime = event.timestamp;
-    time.textContent = formatEventTime(event.timestamp);
+    const formatted = formatEventParts(event.timestamp);
+    const datePart = document.createElement('span');
+    datePart.className = 'history-date';
+    datePart.textContent = formatted.date;
+    const timePart = document.createElement('span');
+    timePart.className = 'history-clock';
+    timePart.textContent = formatted.time;
+    time.append(datePart, timePart);
     const message = document.createElement('span');
+    message.className = 'history-message';
     message.textContent = event.message;
     item.append(time, message);
     list.append(item);
@@ -349,9 +377,11 @@ function renderLisaDeploymentDialog(lisa) {
 
   lisaDeploymentBodyEl.replaceChildren();
 
+  const deployment = lisa.deployment ?? null;
+  const applicationName = deployment?.application || lisa.application || 'aplicación';
   const application = document.createElement('p');
   application.className = 'deployment-app';
-  application.textContent = `Desplegando: ${lisa.application || 'aplicación'}`;
+  application.textContent = `Desplegando: ${applicationName}`;
 
   const phases = normalizeLisaDeploymentPhases(lisa);
   const list = document.createElement('ol');
@@ -384,17 +414,17 @@ function renderLisaDeploymentDialog(lisa) {
 
 function normalizeLisaDeploymentPhases(lisa) {
   const source =
+    lisa.deployment?.phases ??
     lisa.deploymentPhases ??
     lisa.phases ??
     lisa.currentDeployment?.phases ??
-    lisa.deployment?.phases ??
     lisa.activeDeployment?.phases ??
     lisa.progress?.phases;
 
   if (!Array.isArray(source) || source.length === 0) {
     return [
       {
-        name: lisa.application || 'Despliegue activo',
+        name: lisa.deployment?.phaseLabel || lisa.application || 'Despliegue activo',
         status: 'current',
         detail: 'Lisa está desplegando esta aplicación.'
       }
@@ -414,7 +444,7 @@ function normalizeLisaDeploymentPhases(lisa) {
     return {
       name: phase.name ?? phase.title ?? phase.label ?? `Fase ${index + 1}`,
       status: normalizeLisaPhaseStatus(rawStatus),
-      detail: phase.detail ?? phase.description ?? phase.message ?? ''
+      detail: phase.detail ?? phase.description ?? phase.message ?? phase.phaseLabel ?? ''
     };
   });
 }
@@ -441,7 +471,6 @@ function lisaPhaseStatusText(status) {
   if (status === 'failed') return 'Error';
   return 'Pendiente';
 }
-
 function startLisaExpressionLoop() {
   if (lisaPointerTracking || lisaExpressionTimer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return;
@@ -578,15 +607,25 @@ window.__homelabDashboard = {
 };
 
 function formatEventTime(timestamp) {
+  const parts = formatEventParts(timestamp);
+  return [parts.date, parts.time].filter(Boolean).join(' ');
+}
+
+function formatEventParts(timestamp) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {
-    return '';
+    return { date: '', time: '' };
   }
 
-  return date.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+
+  return {
+    date: `${day}/${month}`,
+    time: `${hour}:${minute}`
+  };
 }
 
 function renderServices() {
