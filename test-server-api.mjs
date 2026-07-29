@@ -73,3 +73,14 @@ test('server control API rejects unknown servers and non-boolean states', async 
   });
   assert.equal(invalid.status, 400);
 });
+
+test('Lisa has a lightweight status endpoint separate from the full dashboard', async () => {
+  const response = await request('/_dashboard/lisa');
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(typeof body.generatedAt, 'string');
+  assert.equal(typeof body.lisa, 'object');
+  assert.equal('servers' in body, false);
+  assert.equal('services' in body, false);
+});

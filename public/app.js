@@ -100,7 +100,7 @@ async function loadDashboard() {
 }
 
 async function loadLisaStatus() {
-  const response = await fetch('/_dashboard/api', { cache: 'no-store' });
+  const response = await fetch('/_dashboard/lisa', { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Dashboard API returned ${response.status}`);
   }

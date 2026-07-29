@@ -147,6 +147,14 @@ app.get('/_dashboard/servers', async (_request, response) => {
   });
 });
 
+app.get('/_dashboard/lisa', async (_request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  response.json({
+    generatedAt: new Date().toISOString(),
+    lisa: await readLisaStatus()
+  });
+});
+
 app.post('/_dashboard/servers/:serverId', async (request, response, next) => {
   if (request.get('x-dashboard-action') !== 'server-toggle') {
     response.status(403).json({ error: 'Solicitud de control no válida.' });
