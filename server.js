@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAuthService } from './auth.js';
+import { queueServerCommand, readManagedServers } from './server-control.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -107,6 +108,11 @@ app.use((request, response, next) => {
   next();
 });
 
+app.use('/assets/servers', express.static(path.join(__dirname, 'public', 'assets', 'servers'), {
+  etag: true,
+  maxAge: '1d',
+  immutable: true
+}));
 app.get('/assets/*', proxyLegacyAsset);
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
@@ -114,10 +120,11 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 app.get('/_dashboard/api', async (request, response) => {
-  const [services, publicHosts, lisa] = await Promise.all([
+  const [services, publicHosts, lisa, servers] = await Promise.all([
     readServices(),
     readPublicHosts(),
-    readLisaStatus()
+    readLisaStatus(),
+    readManagedServers()
   ]);
 
   response.json({
@@ -127,8 +134,44 @@ app.get('/_dashboard/api', async (request, response) => {
       ...service,
       url: buildServiceUrl(request, service.path, service.kind)
     })),
-    lisa
+    lisa,
+    servers
   });
+});
+
+app.get('/_dashboard/servers', async (_request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  response.json({
+    generatedAt: new Date().toISOString(),
+    servers: await readManagedServers()
+  });
+});
+
+app.post('/_dashboard/servers/:serverId', async (request, response, next) => {
+  if (request.get('x-dashboard-action') !== 'server-toggle') {
+    response.status(403).json({ error: 'Solicitud de control no válida.' });
+    return;
+  }
+
+  try {
+    const command = await queueServerCommand(request.params.serverId, request.body?.enabled);
+    response.status(202).json({
+      accepted: true,
+      commandId: command.commandId,
+      serverId: command.serverId,
+      enabled: command.enabled
+    });
+  } catch (error) {
+    if (error.code === 'UNKNOWN_SERVER') {
+      response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'INVALID_STATE') {
+      response.status(400).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
 });
 
 app.get('*', (request, response, next) => {

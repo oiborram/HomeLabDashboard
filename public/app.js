@@ -10,6 +10,8 @@ const lisaDeploymentExpandEl = document.querySelector('#lisaDeploymentExpand');
 const logoutButton = document.querySelector('#logoutButton');
 
 let services = [];
+let managedServers = [];
+const pendingServerStates = new Map();
 let latestLisa = {
   status: 'offline',
   available: false,
@@ -87,6 +89,8 @@ async function loadDashboard() {
   const lisa = applyLisaPreview(data.lisa);
   trackLisaDeployment(lisa);
   services = data.services;
+  managedServers = data.servers ?? [];
+  reconcilePendingServers();
   latestLisa = lisa;
   if (!lisaPointerTracking && !lisaExpressionActive) {
     renderLisa(lisa);
@@ -806,18 +810,22 @@ function renderServices() {
     [service.name, service.path, service.kind, service.origin, service.upstream]
       .filter(Boolean)
       .some(value => value.toLowerCase().includes(query)));
+  const filteredServers = managedServers.filter(server =>
+    [server.name, server.status, server.message]
+      .filter(Boolean)
+      .some(value => value.toLowerCase().includes(query)));
 
-  servicesEl.replaceChildren(...renderServiceGroups(filtered));
-  emptyEl.hidden = filtered.length > 0;
+  servicesEl.replaceChildren(...renderServiceGroups(filtered, filteredServers));
+  emptyEl.hidden = filtered.length > 0 || filteredServers.length > 0;
 }
 
-function renderServiceGroups(serviceList) {
+function renderServiceGroups(serviceList, serverList) {
   const groups = [
     ['Ilicilabs', serviceList.filter(service => service.origin === 'Ilicilabs')],
     ['Otros servicios', serviceList.filter(service => service.origin !== 'Ilicilabs')]
   ];
 
-  return groups
+  const sections = groups
     .filter(([, groupServices]) => groupServices.length > 0)
     .map(([title, groupServices]) => {
       const section = document.createElement('section');
@@ -841,6 +849,165 @@ function renderServiceGroups(serviceList) {
       section.append(header, grid);
       return section;
     });
+
+  if (serverList.length > 0) {
+    sections.push(renderServerGroup(serverList));
+  }
+
+  return sections;
+}
+
+function renderServerGroup(serverList) {
+  const section = document.createElement('section');
+  section.className = 'service-group server-group';
+
+  const header = document.createElement('div');
+  header.className = 'group-header';
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'Servidores';
+
+  const count = document.createElement('span');
+  count.className = 'group-count';
+  count.textContent = `${serverList.length}`;
+
+  const list = document.createElement('div');
+  list.className = 'server-list';
+  list.replaceChildren(...serverList.map(renderServerRow));
+
+  header.append(heading, count);
+  section.append(header, list);
+  return section;
+}
+
+function renderServerRow(server) {
+  const pending = pendingServerStates.get(server.id);
+  const row = document.createElement('article');
+  row.className = `server-row is-${pending ? (pending.enabled ? 'starting' : 'stopping') : server.status}`;
+
+  const logo = document.createElement('img');
+  logo.className = 'server-logo';
+  logo.src = server.logo;
+  logo.alt = '';
+  logo.width = 184;
+  logo.height = 86;
+
+  const copy = document.createElement('div');
+  copy.className = 'server-copy';
+
+  const name = document.createElement('h3');
+  name.textContent = server.name;
+
+  const state = document.createElement('p');
+  state.className = 'server-state';
+  state.setAttribute('aria-live', 'polite');
+  state.textContent = pending
+    ? (pending.enabled ? 'Iniciando…' : 'Deteniendo y guardando…')
+    : serverStatusLabel(server);
+  copy.append(name, state);
+
+  const label = document.createElement('label');
+  label.className = 'server-toggle';
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = pending ? pending.enabled : server.running;
+  input.disabled =
+    !server.available ||
+    Boolean(pending) ||
+    ['starting', 'stopping'].includes(server.status);
+  input.setAttribute('aria-label', `${input.checked ? 'Detener' : 'Iniciar'} ${server.name}`);
+  input.addEventListener('change', () => {
+    void setServerEnabled(server, input.checked);
+  });
+
+  const track = document.createElement('span');
+  track.className = 'server-toggle-track';
+  track.setAttribute('aria-hidden', 'true');
+
+  label.append(input, track);
+  row.append(logo, copy, label);
+  return row;
+}
+
+function serverStatusLabel(server) {
+  const labels = {
+    running: 'En ejecución',
+    stopped: 'Detenido',
+    starting: 'Iniciando…',
+    stopping: 'Deteniendo y guardando…',
+    error: server.message || 'Error de control',
+    unavailable: 'Controlador no disponible'
+  };
+  return labels[server.status] ?? 'Estado desconocido';
+}
+
+async function setServerEnabled(server, enabled) {
+  pendingServerStates.set(server.id, { enabled, startedAt: Date.now() });
+  renderServices();
+
+  try {
+    const response = await fetch(`/_dashboard/servers/${encodeURIComponent(server.id)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Dashboard-Action': 'server-toggle'
+      },
+      body: JSON.stringify({ enabled })
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result.error || `No se pudo cambiar el estado (${response.status})`);
+    }
+
+    await waitForServerState(server.id, enabled);
+  } catch (error) {
+    pendingServerStates.delete(server.id);
+    const current = managedServers.find(item => item.id === server.id);
+    if (current) {
+      current.status = 'error';
+      current.message = error.message;
+    }
+    renderServices();
+  }
+}
+
+async function waitForServerState(serverId, enabled) {
+  for (let attempt = 0; attempt < 45; attempt += 1) {
+    await new Promise(resolve => window.setTimeout(resolve, 1000));
+    const response = await fetch('/_dashboard/servers', { cache: 'no-store' });
+    if (!response.ok) {
+      continue;
+    }
+
+    const data = await response.json();
+    managedServers = data.servers ?? [];
+    const server = managedServers.find(item => item.id === serverId);
+    if (server?.running === enabled && ['running', 'stopped'].includes(server.status)) {
+      pendingServerStates.delete(serverId);
+      renderServices();
+      return;
+    }
+    if (server?.status === 'error' || !server?.available) {
+      throw new Error(server?.message || 'El controlador dejó de estar disponible');
+    }
+    renderServices();
+  }
+
+  throw new Error('El servidor no confirmó el cambio de estado a tiempo');
+}
+
+function reconcilePendingServers() {
+  for (const [serverId, pending] of pendingServerStates) {
+    const server = managedServers.find(item => item.id === serverId);
+    const reachedRequestedState =
+      (pending.enabled && server?.status === 'running') ||
+      (!pending.enabled && server?.status === 'stopped');
+    if (!server || reachedRequestedState || Date.now() - pending.startedAt > 45_000) {
+      pendingServerStates.delete(serverId);
+    }
+  }
 }
 
 function renderServiceCard(service, index = 0) {

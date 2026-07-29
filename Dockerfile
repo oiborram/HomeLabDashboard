@@ -7,6 +7,7 @@ RUN npm install --omit=dev
 
 COPY server.js ./
 COPY auth.js ./
+COPY server-control.js ./
 COPY public ./public
 
 ENV PORT=3000
