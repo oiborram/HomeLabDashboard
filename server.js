@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createAuthService } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,10 +23,95 @@ const lisaDeploymentStatusPath =
   process.env.LISA_DEPLOYMENT_STATUS_PATH ??
   process.env.Lisa__DeploymentStatusPath ??
   '/app/lisa-data/deployment-status.json';
+const lisaDeploymentManifestPath = process.env.LISA_DEPLOYMENT_MANIFEST_PATH ?? '/app/lisa-data/deployments.json';
+const ilicilabsWorkspacePath = process.env.ILICILABS_WORKSPACE_PATH ?? 'C:\\dev\\Ilicilabs';
+const ilicilabsExcludedApps = parseList(
+  process.env.ILICILABS_EXCLUDED_APPS ?? 'dnd-frontend,DNDDynamicSheet_Front,oiborram/DNDDynamicSheet_Front');
 const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
+const auth = createAuthService();
+
+app.set('trust proxy', process.env.AUTH_TRUST_PROXY ?? 'loopback, linklocal, uniquelocal');
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(express.json({ limit: '1kb', type: 'application/json' }));
+
+app.get('/health', (_request, response) => {
+  response.json({
+    ok: true,
+    authentication: {
+      enabled: auth.enabled,
+      configured: auth.isConfigured()
+    }
+  });
+});
+
+app.get('/login', sendPublicFile('login.html'));
+app.get('/login.css', sendPublicFile('login.css'));
+app.get('/login.js', sendPublicFile('login.js'));
+
+app.get('/auth/status', (request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  response.json(auth.publicStatus(request));
+});
+
+app.post('/auth/login', (request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  const result = auth.verifyLoginCode(request.body?.code, request.ip);
+
+  if (!result.ok) {
+    if (result.retryAfter) {
+      response.setHeader('Retry-After', result.retryAfter);
+    }
+    response.status(result.status).json(result);
+    return;
+  }
+
+  auth.issueSession(response);
+  response.sendStatus(204);
+});
+
+app.post('/auth/logout', (_request, response) => {
+  auth.clearSession(response);
+  response.sendStatus(204);
+});
+
+app.get('/_auth/check', (request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  if (!auth.isConfigured() && auth.enabled) {
+    response.sendStatus(503);
+    return;
+  }
+
+  response.sendStatus(auth.isAuthenticated(request) ? 204 : 401);
+});
+
+app.use((request, response, next) => {
+  if (!auth.isConfigured() && auth.enabled) {
+    if (isPageNavigation(request)) {
+      response.redirect(302, '/login');
+      return;
+    }
+    response.status(503).json({ error: 'El acceso todavía no está configurado.' });
+    return;
+  }
+
+  if (!auth.isAuthenticated(request)) {
+    if (isPageNavigation(request)) {
+      response.redirect(302, '/login');
+      return;
+    }
+    response.status(401).json({ error: 'La sesión no es válida o ha caducado.' });
+    return;
+  }
+
+  next();
+});
 
 app.get('/assets/*', proxyLegacyAsset);
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: '5m'
+}));
 
 app.get('/_dashboard/api', async (request, response) => {
   const [services, publicHosts, lisa] = await Promise.all([
@@ -45,10 +131,6 @@ app.get('/_dashboard/api', async (request, response) => {
   });
 });
 
-app.get('/health', (_request, response) => {
-  response.json({ ok: true });
-});
-
 app.get('*', (request, response, next) => {
   if (!request.accepts('html')) {
     next();
@@ -60,7 +142,44 @@ app.get('*', (request, response, next) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   app.listen(port, () => {
     console.log(`HomeLabDashboard listening on ${port}`);
+    if (auth.enabled && !auth.isConfigured()) {
+      console.error(`Autenticación bloqueada por configuración incompleta: ${auth.configurationIssues.join('; ')}`);
+    }
+    void auth.startPublisher();
   });
+}
+
+function sendPublicFile(fileName) {
+  return (_request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
+    response.sendFile(path.join(__dirname, 'public', fileName));
+  };
+}
+
+function securityHeaders(request, response, next) {
+  response.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "img-src 'self' data:",
+    "script-src 'self'",
+    "style-src 'self'"
+  ].join('; '));
+  response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('X-Frame-Options', 'DENY');
+  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+}
+
+function isPageNavigation(request) {
+  return request.method === 'GET'
+    && !path.extname(request.path)
+    && request.accepts('html');
 }
 
 export async function readServices(configPath = nginxConfigPath) {
@@ -75,7 +194,9 @@ export async function readServices(configPath = nginxConfigPath) {
     throw error;
   }
 
-  return parseNginxLocations(config)
+  const deployments = await readLisaDeployments();
+
+  return parseNginxLocations(config, deployments)
     .filter(service => service.path !== '/')
     .filter(service => !isStaticAssetPath(service.path))
     .filter(service => !isTechnicalApiDocPath(service.path))
@@ -107,7 +228,7 @@ async function proxyLegacyAsset(request, response, next) {
   }
 }
 
-export function parseNginxLocations(config) {
+export function parseNginxLocations(config, deployments = null) {
   const services = [];
   const locationPattern = /^\s*location\s+(=\s+)?([^\s{]+)\s*\{/gm;
   let match;
@@ -132,7 +253,7 @@ export function parseNginxLocations(config) {
       name: serviceName(routePath),
       path: routePath,
       kind: inferKind(routePath, proxyPass),
-      origin: inferOrigin(config, locationStart),
+      origin: inferOrigin(config, locationStart, routePath, deployments),
       upstream: proxyPass,
       redirectTo,
       source: 'nginx'
@@ -164,6 +285,69 @@ async function readPublicHosts() {
 
     throw error;
   }
+}
+
+async function readLisaDeployments() {
+  try {
+    const manifest = JSON.parse(await fs.readFile(lisaDeploymentManifestPath, 'utf8'));
+    return (manifest.Applications ?? [])
+      .filter(application => typeof application.Route === 'string')
+      .map(application => ({
+        route: application.Route,
+        localPath: application.LocalPath,
+        origin: isIlicilabsDeployment(application) ? 'Ilicilabs' : 'Otros'
+      }));
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function isIlicilabsDeployment(application) {
+  if (isExcludedIlicilabsApp(application)) {
+    return false;
+  }
+
+  return isPathWithin(application.LocalPath, ilicilabsWorkspacePath);
+}
+
+function isExcludedIlicilabsApp(application) {
+  return [
+    application.Route,
+    application.ServiceName,
+    application.RepositoryName,
+    application.RepositoryFullName
+  ]
+    .filter(Boolean)
+    .some(value => ilicilabsExcludedApps.includes(value.toLowerCase()));
+}
+
+function parseList(value) {
+  return value
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isPathWithin(candidatePath, parentPath) {
+  if (typeof candidatePath !== 'string' || typeof parentPath !== 'string') {
+    return false;
+  }
+
+  const candidate = normalizeFilesystemPath(candidatePath);
+  const parent = normalizeFilesystemPath(parentPath);
+  return candidate === parent || candidate.startsWith(`${parent}\\`);
+}
+
+function normalizeFilesystemPath(filesystemPath) {
+  return filesystemPath
+    .replace(/\//g, '\\')
+    .replace(/\\+/g, '\\')
+    .replace(/\\+$/u, '')
+    .toLowerCase();
 }
 
 export async function readLisaStatus(options = {}) {
@@ -559,10 +743,31 @@ function isTechnicalApiDocPath(routePath) {
   return /\/(?:openapi|swagger)\//i.test(routePath);
 }
 
-function inferOrigin(config, locationStart) {
+function inferOrigin(config, locationStart, routePath, deployments) {
+  const deployment = deployments?.find(application => routeBelongsToDeployment(routePath, application.route));
+  if (deployment) {
+    return deployment.origin;
+  }
+
+  if (deployments) {
+    return 'Otros';
+  }
+
   const managedStart = config.lastIndexOf('# <lisa-managed>', locationStart);
   const managedEnd = config.lastIndexOf('# </lisa-managed>', locationStart);
   return managedStart > managedEnd ? 'Ilicilabs' : 'Otros';
+}
+
+function routeBelongsToDeployment(routePath, deploymentRoute) {
+  const normalizedRoute = deploymentRoute.replace(/^\/+|\/+$/gu, '');
+  const canonicalPath = canonicalRoutePath(routePath);
+
+  if (!normalizedRoute) {
+    return canonicalPath === '/';
+  }
+
+  const routePrefix = `/${normalizedRoute}`;
+  return canonicalPath === routePrefix || canonicalPath.startsWith(`${routePrefix}/`);
 }
 
 function buildServiceUrl(_request, routePath, kind) {

@@ -7,6 +7,7 @@ const lisaDeploymentDialogEl = document.querySelector('#lisaDeploymentDialog');
 const lisaDeploymentBodyEl = document.querySelector('#lisaDeploymentBody');
 const lisaDeploymentCloseEl = document.querySelector('#lisaDeploymentClose');
 const lisaDeploymentExpandEl = document.querySelector('#lisaDeploymentExpand');
+const logoutButton = document.querySelector('#logoutButton');
 
 let services = [];
 let latestLisa = {
@@ -66,6 +67,15 @@ window.setTimeout(() => {
     document.body.classList.add('intro-played');
   }, 1900);
 }, 2600);
+
+logoutButton.addEventListener('click', async () => {
+  logoutButton.disabled = true;
+  try {
+    await fetch('/auth/logout', { method: 'POST' });
+  } finally {
+    window.location.replace('/login');
+  }
+});
 
 async function loadDashboard() {
   const response = await fetch('/_dashboard/api', { cache: 'no-store' });

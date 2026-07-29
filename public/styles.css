@@ -535,6 +535,29 @@ input:focus-visible {
   display: none;
 }
 
+.hero-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.logout-button {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.logout-button:hover {
+  border-color: var(--coral);
+  color: var(--text);
+}
+
 .status-panel:focus {
   outline: 2px solid rgba(47, 128, 255, .58);
   outline-offset: 3px;
@@ -2602,6 +2625,16 @@ body.intro-handoff .service-card {
     min-width: 0;
     min-height: 82px;
     padding: 10px;
+  }
+
+  .hero-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .logout-button {
+    width: min(100%, 380px);
   }
 
   .lisa-bot {

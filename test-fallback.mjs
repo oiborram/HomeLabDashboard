@@ -1,7 +1,8 @@
 ﻿import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
-import { app } from './server.js';
+process.env.AUTH_ENABLED = 'false';
+const { app } = await import('./server.js');
 
 async function request(path, headers = {}) {
   const server = http.createServer(app);
