@@ -15,6 +15,14 @@ $WindroseStartScript = Join-Path $WindroseRoot "Start-Machurose.ps1"
 $WindroseExecutable = Join-Path $WindroseRoot "R5\Binaries\Win64\WindroseServer-Win64-Shipping.exe"
 
 New-Item -ItemType Directory -Path $CommandsPath -Force | Out-Null
+$otherControllers = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.ProcessId -ne $PID -and
+    $_.Name -ieq "powershell.exe" -and
+    $_.CommandLine -match '-File\s+"?C:\\ProgramData\\HomeLabDashboard\\ServerController\.ps1"?'
+})
+if ($otherControllers.Count -gt 0) {
+    exit 0
+}
 $controllerMutex = [System.Threading.Mutex]::new($false, "Local\HomeLabDashboardServerController")
 if (-not $controllerMutex.WaitOne(0)) {
     exit 0
