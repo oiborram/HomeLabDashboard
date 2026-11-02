@@ -13,13 +13,13 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 test.after(() => new Promise(resolve => server.close(resolve)));
 
-test('anonymous GET/HEAD exposes only the fixed public discovery inventory', async () => {
-  for (const [path, type] of [['/robots.txt', 'text/plain'], ['/sitemap.xml', 'application/xml']]) {
+test('anonymous GET/HEAD keeps the homelab private and retires the former portfolio sitemap', async () => {
+  for (const [path, type, status] of [['/robots.txt', 'text/plain', 200], ['/sitemap.xml', 'text/plain', 410]]) {
     const get = await fetch(origin + path, { headers: { Host: 'untrusted.example', 'X-Forwarded-Host': 'untrusted.example' } });
     const body = await get.text();
     const head = await fetch(origin + path, { method: 'HEAD' });
-    assert.equal(get.status, 200);
-    assert.equal(head.status, 200);
+    assert.equal(get.status, status);
+    assert.equal(head.status, status);
     assert.ok(get.headers.get('content-type').startsWith(type));
     assert.equal(head.headers.get('content-type'), get.headers.get('content-type'));
     assert.equal(head.headers.get('content-length'), get.headers.get('content-length'));
@@ -27,11 +27,10 @@ test('anonymous GET/HEAD exposes only the fixed public discovery inventory', asy
     assert.equal(get.headers.get('set-cookie'), null);
     assert.doesNotMatch(body, /untrusted|_dashboard|windrose|daria|_auth/i);
     if (path === '/robots.txt') {
-      assert.match(body, /^User-agent: \*\nDisallow: \/\nAllow: \/portfolio\/\n/);
-      assert.match(body, /Sitemap: https:\/\/iborrero\.duckdns\.org:9443\/sitemap\.xml/);
+      assert.equal(body, 'User-agent: *\nDisallow: /\n');
     } else {
-      assert.deepEqual([...body.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]), ['https://iborrero.duckdns.org:9443/portfolio/sitemap.xml']);
-      assert.match(body, /<sitemapindex /);
+      assert.match(body, /sitemap has been retired/);
+      assert.doesNotMatch(body, /https?:|<loc>|portfolio/i);
     }
   }
 });

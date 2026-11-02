@@ -35,16 +35,16 @@ app.disable('x-powered-by');
 app.use(securityHeaders);
 app.use(express.json({ limit: '1kb', type: 'application/json' }));
 
-// Reviewed public discovery inventory. Never derive it from private services,
+// Private homelab crawler policy. Never derive public URLs from private services,
 // deployment manifests or the untrusted request Host/forwarding headers.
 app.get('/robots.txt', (_request, response) => {
   response.setHeader('Cache-Control', 'public, max-age=300');
-  response.type('text/plain').send('User-agent: *\nDisallow: /\nAllow: /portfolio/\nSitemap: https://iborrero.duckdns.org:9443/sitemap.xml\n');
+  response.type('text/plain').send('User-agent: *\nDisallow: /\n');
 });
 
 app.get('/sitemap.xml', (_request, response) => {
   response.setHeader('Cache-Control', 'public, max-age=300');
-  response.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://iborrero.duckdns.org:9443/portfolio/sitemap.xml</loc></sitemap></sitemapindex>\n');
+  response.status(410).type('text/plain').send('The public homelab sitemap has been retired.\n');
 });
 
 app.get('/health', (_request, response) => {

@@ -2,13 +2,13 @@
 
 ## Public crawler discovery
 
-Only `GET`/`HEAD /robots.txt` and `/sitemap.xml` are public discovery endpoints,
-registered before session authentication. Their fixed inventory permits the
-public `/portfolio/` subtree and references its sitemap on the existing HTTPS
-port 9443. The root sitemap is a sitemap index; it does not expose private
-services or derive URLs from request headers. All dashboard pages, APIs and
-server controls retain authentication. Deploy this source change through Lisa;
-no router, nginx, authentication configuration or port change is required.
+`GET`/`HEAD /robots.txt` is registered before session authentication and now
+disallows crawling the entire private homelab. The portfolio moved to GitHub
+Pages on 2 November 2026; the former public `/sitemap.xml` responds with HTTP
+410 Gone and advertises no retired application URLs. These fixed responses
+expose no private services and derive nothing from request headers. All
+dashboard pages, APIs and server controls retain authentication. Publish this
+source change through Lisa; no router, authentication or port change is needed.
 
 El dashboard usa un código numérico compartido que cambia cada 30 segundos. El bot
 publica el código en un único mensaje del grupo y lo actualiza automáticamente. Tras
