@@ -28,13 +28,24 @@ const lisaDeploymentManifestPath = process.env.LISA_DEPLOYMENT_MANIFEST_PATH ?? 
 const ilicilabsWorkspacePath = process.env.ILICILABS_WORKSPACE_PATH ?? 'C:\\dev\\Ilicilabs';
 const ilicilabsExcludedApps = parseList(
   process.env.ILICILABS_EXCLUDED_APPS ?? 'dnd-frontend,DNDDynamicSheet_Front,oiborram/DNDDynamicSheet_Front');
-const legacyAssetOrigin = process.env.LEGACY_ASSET_ORIGIN ?? 'http://dnd-control-panel';
 const auth = createAuthService();
 
 app.set('trust proxy', process.env.AUTH_TRUST_PROXY ?? 'loopback, linklocal, uniquelocal');
 app.disable('x-powered-by');
 app.use(securityHeaders);
 app.use(express.json({ limit: '1kb', type: 'application/json' }));
+
+// Reviewed public discovery inventory. Never derive it from private services,
+// deployment manifests or the untrusted request Host/forwarding headers.
+app.get('/robots.txt', (_request, response) => {
+  response.setHeader('Cache-Control', 'public, max-age=300');
+  response.type('text/plain').send('User-agent: *\nDisallow: /\nAllow: /portfolio/\nSitemap: https://iborrero.duckdns.org:9443/sitemap.xml\n');
+});
+
+app.get('/sitemap.xml', (_request, response) => {
+  response.setHeader('Cache-Control', 'public, max-age=300');
+  response.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://iborrero.duckdns.org:9443/portfolio/sitemap.xml</loc></sitemap></sitemapindex>\n');
+});
 
 app.get('/health', (_request, response) => {
   response.json({
@@ -113,7 +124,6 @@ app.use('/assets/servers', express.static(path.join(__dirname, 'public', 'assets
   maxAge: '1d',
   immutable: true
 }));
-app.get('/assets/*', proxyLegacyAsset);
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   maxAge: '5m'
@@ -253,30 +263,6 @@ export async function readServices(configPath = nginxConfigPath) {
     .filter(service => !isTechnicalApiDocPath(service.path))
     .filter(service => !service.path.startsWith('/_dashboard'))
     .sort((left, right) => left.path.localeCompare(right.path, 'es'));
-}
-
-async function proxyLegacyAsset(request, response, next) {
-  try {
-    const upstreamUrl = new URL(request.originalUrl, legacyAssetOrigin);
-    const upstreamResponse = await fetch(upstreamUrl);
-
-    if (!upstreamResponse.ok || upstreamResponse.body === null) {
-      response.sendStatus(upstreamResponse.status);
-      return;
-    }
-
-    response.status(upstreamResponse.status);
-    for (const [header, value] of upstreamResponse.headers) {
-      if (!['connection', 'content-encoding', 'transfer-encoding'].includes(header.toLowerCase())) {
-        response.setHeader(header, value);
-      }
-    }
-
-    const buffer = Buffer.from(await upstreamResponse.arrayBuffer());
-    response.send(buffer);
-  } catch (error) {
-    next(error);
-  }
 }
 
 export function parseNginxLocations(config, deployments = null) {

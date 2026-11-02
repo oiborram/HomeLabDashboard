@@ -1,5 +1,15 @@
 # Acceso mediante código compartido de Telegram
 
+## Public crawler discovery
+
+Only `GET`/`HEAD /robots.txt` and `/sitemap.xml` are public discovery endpoints,
+registered before session authentication. Their fixed inventory permits the
+public `/portfolio/` subtree and references its sitemap on the existing HTTPS
+port 9443. The root sitemap is a sitemap index; it does not expose private
+services or derive URLs from request headers. All dashboard pages, APIs and
+server controls retain authentication. Deploy this source change through Lisa;
+no router, nginx, authentication configuration or port change is required.
+
 El dashboard usa un código numérico compartido que cambia cada 30 segundos. El bot
 publica el código en un único mensaje del grupo y lo actualiza automáticamente. Tras
 validarlo, el navegador conserva una sesión mediante una cookie segura.
