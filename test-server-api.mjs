@@ -52,6 +52,22 @@ test('server control API accepts an allowlisted Windrose command', async () => {
   assert.equal((await fs.readdir(path.join(controlPath, 'commands'))).length, 1);
 });
 
+test('server control API accepts an allowlisted Enshrouded command', async () => {
+  const response = await request('/_dashboard/servers/enshrouded', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Dashboard-Action': 'server-toggle'
+    },
+    body: JSON.stringify({ enabled: true })
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 202);
+  assert.equal(body.serverId, 'enshrouded');
+  assert.equal(body.enabled, true);
+});
+
 test('server control API rejects unknown servers and non-boolean states', async () => {
   const unknown = await request('/_dashboard/servers/not-allowed', {
     method: 'POST',

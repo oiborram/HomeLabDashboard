@@ -7,6 +7,11 @@ export const managedServerDefinitions = Object.freeze([
     id: 'windrose',
     name: 'Windrose',
     logo: '/assets/servers/windrose.jpg'
+  }),
+  Object.freeze({
+    id: 'enshrouded',
+    name: 'Enshrouded',
+    logo: '/assets/servers/enshrouded.jpg'
   })
 ]);
 
@@ -97,7 +102,7 @@ export async function queueServerCommand(serverId, enabled, {
 }
 
 function normalizeStatus(status) {
-  return ['running', 'stopped', 'starting', 'stopping', 'error'].includes(status)
+  return ['running', 'stopped', 'starting', 'stopping', 'updating', 'error'].includes(status)
     ? status
     : 'error';
 }

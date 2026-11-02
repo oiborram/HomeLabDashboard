@@ -12,6 +12,7 @@ const logoutButton = document.querySelector('#logoutButton');
 let services = [];
 let managedServers = [];
 const pendingServerStates = new Map();
+const serverActionTimeoutMs = 30 * 60 * 1000;
 let latestLisa = {
   status: 'offline',
   available: false,
@@ -882,8 +883,9 @@ function renderServerGroup(serverList) {
 
 function renderServerRow(server) {
   const pending = pendingServerStates.get(server.id);
+  const updating = server.status === 'updating';
   const row = document.createElement('article');
-  row.className = `server-row is-${pending ? (pending.enabled ? 'starting' : 'stopping') : server.status}`;
+  row.className = `server-row is-${updating ? 'updating' : pending ? (pending.enabled ? 'starting' : 'stopping') : server.status}`;
 
   const logo = document.createElement('img');
   logo.className = 'server-logo';
@@ -901,7 +903,9 @@ function renderServerRow(server) {
   const state = document.createElement('p');
   state.className = 'server-state';
   state.setAttribute('aria-live', 'polite');
-  state.textContent = pending
+  state.textContent = updating
+    ? serverStatusLabel(server)
+    : pending
     ? (pending.enabled ? 'Iniciando…' : 'Deteniendo y guardando…')
     : serverStatusLabel(server);
   copy.append(name, state);
@@ -915,7 +919,7 @@ function renderServerRow(server) {
   input.disabled =
     !server.available ||
     Boolean(pending) ||
-    ['starting', 'stopping'].includes(server.status);
+    ['starting', 'stopping', 'updating'].includes(server.status);
   input.setAttribute('aria-label', `${input.checked ? 'Detener' : 'Iniciar'} ${server.name}`);
   input.addEventListener('change', () => {
     void setServerEnabled(server, input.checked);
@@ -936,6 +940,7 @@ function serverStatusLabel(server) {
     stopped: 'Detenido',
     starting: 'Iniciando…',
     stopping: 'Deteniendo y guardando…',
+    updating: 'Actualizando…',
     error: server.message || 'Error de control',
     unavailable: 'Controlador no disponible'
   };
@@ -974,7 +979,8 @@ async function setServerEnabled(server, enabled) {
 }
 
 async function waitForServerState(serverId, enabled) {
-  for (let attempt = 0; attempt < 45; attempt += 1) {
+  const deadline = Date.now() + serverActionTimeoutMs;
+  while (Date.now() < deadline) {
     await new Promise(resolve => window.setTimeout(resolve, 1000));
     const response = await fetch('/_dashboard/servers', { cache: 'no-store' });
     if (!response.ok) {
@@ -1004,7 +1010,7 @@ function reconcilePendingServers() {
     const reachedRequestedState =
       (pending.enabled && server?.status === 'running') ||
       (!pending.enabled && server?.status === 'stopped');
-    if (!server || reachedRequestedState || Date.now() - pending.startedAt > 45_000) {
+    if (!server || reachedRequestedState || Date.now() - pending.startedAt > serverActionTimeoutMs) {
       pendingServerStates.delete(serverId);
     }
   }

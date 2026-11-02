@@ -7,6 +7,8 @@ $ErrorActionPreference = "Stop"
 $InstallRoot = "C:\ProgramData\HomeLabDashboard"
 $ControllerPath = Join-Path $InstallRoot "ServerController.ps1"
 $LogPath = Join-Path $InstallRoot "bootstrap.log"
+$StatusPath = Join-Path $ControlPath "status.json"
+$HeartbeatMaxAgeSeconds = 90
 
 function Write-BootstrapLog {
     param([string]$Message)
@@ -23,15 +25,26 @@ function Write-BootstrapLog {
     }
 }
 
-function Get-ControllerProcesses {
-    @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -ieq "powershell.exe" -and
-        $_.CommandLine -match '-File\s+"?C:\\ProgramData\\HomeLabDashboard\\ServerController\.ps1"?'
-    })
+function Test-ControllerHeartbeat {
+    if (-not (Test-Path -LiteralPath $StatusPath)) {
+        return $false
+    }
+
+    try {
+        $state = Get-Content -LiteralPath $StatusPath -Raw | ConvertFrom-Json
+        $updatedAt = [DateTimeOffset]::Parse([string]$state.updatedAt).ToUniversalTime()
+        $ageSeconds = ([DateTimeOffset]::UtcNow - $updatedAt).TotalSeconds
+        return $ageSeconds -ge -5 -and $ageSeconds -le $HeartbeatMaxAgeSeconds
+    }
+    catch {
+        return $false
+    }
 }
 
 try {
-    if ((Get-ControllerProcesses).Count -gt 0) {
+    # El watchdog se ejecuta tanto en la sesión de servicios como en la sesión
+    # interactiva. El latido compartido funciona en ambas; inspeccionar CommandLine no.
+    if (Test-ControllerHeartbeat) {
         exit 0
     }
 
@@ -152,9 +165,13 @@ public static class DetachedProcess
         exit 0
     }
 
-    Start-Sleep -Milliseconds 750
-    if ((Get-ControllerProcesses).Count -eq 0) {
-        Write-BootstrapLog "Server controller PID $createdPid exited during startup."
+    $deadline = (Get-Date).AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 250
+    } while (-not (Test-ControllerHeartbeat) -and (Get-Date) -lt $deadline)
+
+    if (-not (Test-ControllerHeartbeat)) {
+        Write-BootstrapLog "Server controller PID $createdPid did not publish a fresh heartbeat."
         exit 0
     }
 

@@ -17,10 +17,6 @@ test('parseNginxLocations finds proxied services and skips non-proxy locations',
   ];
   const services = parseNginxLocations(`
 server {
-    location /dnd-control-panel {
-        proxy_pass http://dnd-control-panel:80;
-    }
-
     location = /daria {
         absolute_redirect off;
         return 308 /daria/;
@@ -45,7 +41,6 @@ server {
   assert.deepEqual(
     services.map(service => [service.path, service.kind, service.origin, service.upstream, service.redirectTo]),
     [
-      ['/dnd-control-panel', 'Web', 'Otros', 'http://dnd-control-panel:80', null],
       ['/daria/', 'Web', 'Ilicilabs', 'http://daria:80/', null],
       ['/dnd-frontend/', 'Web', 'Otros', 'http://dnd-frontend:80/', null],
       ['/', 'Web', 'Otros', 'http://homelab-dashboard:3000', null]

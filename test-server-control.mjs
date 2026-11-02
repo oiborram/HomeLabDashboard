@@ -27,6 +27,43 @@ test('controller state exposes Windrose when its status is fresh', async t => {
   assert.equal(windrose.logo, '/assets/servers/windrose.jpg');
 });
 
+test('controller state exposes Enshrouded independently from Windrose', async t => {
+  const controlPath = await temporaryControlPath(t);
+  const now = new Date('2026-09-14T17:00:00.000Z');
+  await fs.writeFile(path.join(controlPath, 'status.json'), JSON.stringify({
+    updatedAt: now.toISOString(),
+    servers: [
+      { id: 'windrose', status: 'stopped' },
+      { id: 'enshrouded', status: 'running' }
+    ]
+  }));
+
+  const servers = await readManagedServers({ controlPath, now: now.getTime() });
+  const enshrouded = servers.find(server => server.id === 'enshrouded');
+
+  assert.equal(enshrouded.name, 'Enshrouded');
+  assert.equal(enshrouded.running, true);
+  assert.equal(enshrouded.available, true);
+  assert.equal(enshrouded.logo, '/assets/servers/enshrouded.jpg');
+});
+
+test('controller state exposes Enshrouded while SteamCMD is updating it', async t => {
+  const controlPath = await temporaryControlPath(t);
+  const now = new Date('2026-09-14T18:00:00.000Z');
+  await fs.writeFile(path.join(controlPath, 'status.json'), JSON.stringify({
+    updatedAt: now.toISOString(),
+    servers: [{ id: 'enshrouded', status: 'updating', message: 'Actualizando servidor con SteamCMD' }]
+  }));
+
+  const servers = await readManagedServers({ controlPath, now: now.getTime() });
+  const enshrouded = servers.find(server => server.id === 'enshrouded');
+
+  assert.equal(enshrouded.status, 'updating');
+  assert.equal(enshrouded.running, false);
+  assert.equal(enshrouded.available, true);
+  assert.equal(enshrouded.message, 'Actualizando servidor con SteamCMD');
+});
+
 test('stale or absent controller state disables server controls', async t => {
   const controlPath = await temporaryControlPath(t);
   const [missing] = await readManagedServers({ controlPath });
@@ -66,6 +103,10 @@ test('commands are atomically queued only for configured servers', async t => {
     queueServerCommand('not-allowed', true, { controlPath }),
     error => error.code === 'UNKNOWN_SERVER'
   );
+
+  const enshroudedCommand = await queueServerCommand('enshrouded', false, { controlPath });
+  assert.equal(enshroudedCommand.serverId, 'enshrouded');
+  assert.equal(enshroudedCommand.enabled, false);
   await assert.rejects(
     queueServerCommand('windrose', 'yes', { controlPath }),
     error => error.code === 'INVALID_STATE'

@@ -2920,7 +2920,8 @@ body.intro-handoff .service-card {
 }
 
 .server-row.is-starting,
-.server-row.is-stopping {
+.server-row.is-stopping,
+.server-row.is-updating {
   --server-state-color: var(--warning);
 }
 

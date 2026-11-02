@@ -10,9 +10,30 @@ $ProgressPreference = "SilentlyContinue"
 $CommandsPath = Join-Path $ControlPath "commands"
 $StatusPath = Join-Path $ControlPath "status.json"
 $LogPath = Join-Path $ControlPath "controller.log"
-$WindroseRoot = "C:\dev\windrose-server-windows"
-$WindroseStartScript = Join-Path $WindroseRoot "Start-Machurose.ps1"
-$WindroseExecutable = Join-Path $WindroseRoot "R5\Binaries\Win64\WindroseServer-Win64-Shipping.exe"
+$ManagedServers = @(
+    [pscustomobject]@{
+        Id = "windrose"
+        Name = "Windrose"
+        Root = "C:\dev\windrose-server-windows"
+        StartScript = "C:\dev\windrose-server-windows\Start-Machurose.ps1"
+        Executable = "C:\dev\windrose-server-windows\R5\Binaries\Win64\WindroseServer-Win64-Shipping.exe"
+        ProcessName = "WindroseServer-Win64-Shipping"
+    },
+    [pscustomobject]@{
+        Id = "enshrouded"
+        Name = "Enshrouded"
+        Root = "C:\dev\enshrouded-server"
+        StartScript = "C:\dev\enshrouded-server\Start-Enshrouded.ps1"
+        UpdateScript = "C:\dev\enshrouded-server\Update-Enshrouded.ps1"
+        UpdateOnStop = $true
+        Executable = "C:\dev\enshrouded-server\enshrouded_server.exe"
+        ProcessName = "enshrouded_server"
+    }
+)
+$ServerById = @{}
+foreach ($server in $ManagedServers) {
+    $ServerById[$server.Id] = $server
+}
 
 New-Item -ItemType Directory -Path $CommandsPath -Force | Out-Null
 $otherControllers = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
@@ -23,8 +44,17 @@ $otherControllers = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinu
 if ($otherControllers.Count -gt 0) {
     exit 0
 }
-$controllerMutex = [System.Threading.Mutex]::new($false, "Local\HomeLabDashboardServerController")
-if (-not $controllerMutex.WaitOne(0)) {
+$controllerMutex = [System.Threading.Mutex]::new($false, "Global\HomeLabDashboardServerController")
+$controllerMutexAcquired = $false
+try {
+    $controllerMutexAcquired = $controllerMutex.WaitOne(0)
+}
+catch [System.Threading.AbandonedMutexException] {
+    # WaitOne concede la propiedad aunque notifique que la instancia anterior cayó.
+    $controllerMutexAcquired = $true
+}
+if (-not $controllerMutexAcquired) {
+    $controllerMutex.Dispose()
     exit 0
 }
 
@@ -76,49 +106,70 @@ public static class ConsoleSignal
 function Write-ControllerLog {
     param([string]$Message)
 
-    if ((Test-Path -LiteralPath $LogPath) -and (Get-Item -LiteralPath $LogPath).Length -gt 1MB) {
-        Move-Item -LiteralPath $LogPath -Destination "$LogPath.old" -Force
-    }
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            if ((Test-Path -LiteralPath $LogPath) -and (Get-Item -LiteralPath $LogPath).Length -gt 1MB) {
+                Move-Item -LiteralPath $LogPath -Destination "$LogPath.old" -Force
+            }
 
-    Add-Content -LiteralPath $LogPath -Value ("{0:O} {1}" -f (Get-Date), $Message) -Encoding UTF8
+            Add-Content -LiteralPath $LogPath -Value ("{0:O} {1}" -f (Get-Date), $Message) -Encoding UTF8
+            return
+        }
+        catch {
+            if ($attempt -lt 3) {
+                Start-Sleep -Milliseconds 100
+            }
+        }
+    }
 }
 
-function Get-WindroseProcesses {
-    @(Get-Process -Name "WindroseServer-Win64-Shipping" -ErrorAction SilentlyContinue |
+function Get-ServerProcesses {
+    param([Parameter(Mandatory)]$Server)
+
+    @(Get-Process -Name $Server.ProcessName -ErrorAction SilentlyContinue |
         Where-Object {
             try {
-                [string]::Equals($_.Path, $WindroseExecutable, [System.StringComparison]::OrdinalIgnoreCase)
+                $processPath = $_.Path
+                [string]::IsNullOrWhiteSpace($processPath) -or
+                    [string]::Equals($processPath, $Server.Executable, [System.StringComparison]::OrdinalIgnoreCase)
             }
             catch {
-                $false
+                # Windows oculta Path entre sesiones de inicio de sesión. El nombre del
+                # ejecutable sigue siendo suficientemente específico para estos servidores.
+                $true
             }
         })
 }
 
 function Write-ServerStatus {
     param(
-        [ValidateSet("running", "stopped", "starting", "stopping", "error")]
-        [string]$Status,
+        [string]$ServerId,
+        [ValidateSet("running", "stopped", "starting", "stopping", "updating", "error")]
+        [string]$Status = "stopped",
         [AllowNull()]
         [string]$Message = $null
     )
 
-    $processes = Get-WindroseProcesses
-    if ($Status -notin @("starting", "stopping", "error")) {
-        $Status = if ($processes.Count -gt 0) { "running" } else { "stopped" }
-    }
-
     $payload = [ordered]@{
         version = 1
         updatedAt = (Get-Date).ToUniversalTime().ToString("O")
-        servers = @(
-            [ordered]@{
-                id = "windrose"
-                status = $Status
-                processIds = @($processes | ForEach-Object { $_.Id })
-                message = $Message
+        servers = @($ManagedServers | ForEach-Object {
+            $server = $_
+            $processes = Get-ServerProcesses -Server $server
+            $serverStatus = if ($processes.Count -gt 0) { "running" } else { "stopped" }
+            $serverMessage = $null
+            if ($server.Id -eq $ServerId -and $Status -in @("starting", "stopping", "updating", "error")) {
+                $serverStatus = $Status
+                $serverMessage = $Message
             }
-        )
+
+            [ordered]@{
+                id = $server.Id
+                status = $serverStatus
+                processIds = @($processes | ForEach-Object { $_.Id })
+                message = $serverMessage
+            }
+        })
     }
 
     $temporaryPath = "$StatusPath.$PID.tmp"
@@ -126,15 +177,16 @@ function Write-ServerStatus {
     Move-Item -LiteralPath $temporaryPath -Destination $StatusPath -Force
 }
 
-function Wait-ForWindroseState {
+function Wait-ForServerState {
     param(
+        [Parameter(Mandatory)]$Server,
         [bool]$Running,
         [int]$TimeoutSeconds
     )
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
-        if ((((Get-WindroseProcesses).Count -gt 0)) -eq $Running) {
+        if ((((Get-ServerProcesses -Server $Server).Count -gt 0)) -eq $Running) {
             return $true
         }
         Start-Sleep -Milliseconds 500
@@ -143,38 +195,70 @@ function Wait-ForWindroseState {
     return $false
 }
 
-function Start-Windrose {
-    if ((Get-WindroseProcesses).Count -gt 0) {
-        Write-ServerStatus -Status "running"
+function Start-ManagedServer {
+    param([Parameter(Mandatory)]$Server)
+
+    if ((Get-ServerProcesses -Server $Server).Count -gt 0) {
+        Write-ServerStatus
         return
     }
 
-    if (-not (Test-Path -LiteralPath $WindroseStartScript) -or -not (Test-Path -LiteralPath $WindroseExecutable)) {
-        throw "No se ha encontrado la instalación de Windrose."
+    if (-not (Test-Path -LiteralPath $Server.StartScript) -or -not (Test-Path -LiteralPath $Server.Executable)) {
+        throw "No se ha encontrado la instalación de $($Server.Name)."
     }
 
-    Write-ServerStatus -Status "starting" -Message "Iniciando servidor"
+    Write-ServerStatus -ServerId $Server.Id -Status "starting" -Message "Iniciando servidor"
     Start-Process -FilePath "powershell.exe" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$WindroseStartScript`"") `
-        -WorkingDirectory $WindroseRoot `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$($Server.StartScript)`"") `
+        -WorkingDirectory $Server.Root `
         -WindowStyle Hidden
 
-    if (-not (Wait-ForWindroseState -Running $true -TimeoutSeconds 30)) {
-        throw "Windrose no inició dentro del tiempo esperado."
+    if (-not (Wait-ForServerState -Server $Server -Running $true -TimeoutSeconds 30)) {
+        throw "$($Server.Name) no inició dentro del tiempo esperado."
     }
 
-    Write-ControllerLog "Windrose iniciado desde el dashboard."
-    Write-ServerStatus -Status "running"
+    Write-ControllerLog "$($Server.Name) iniciado desde el dashboard."
+    Write-ServerStatus
 }
 
-function Stop-Windrose {
-    $processes = Get-WindroseProcesses
+function Update-ManagedServer {
+    param([Parameter(Mandatory)]$Server)
+
+    if (-not $Server.UpdateOnStop) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $Server.UpdateScript)) {
+        throw "No se ha encontrado el actualizador de $($Server.Name)."
+    }
+
+    Write-ServerStatus -ServerId $Server.Id -Status "updating" -Message "Actualizando servidor con SteamCMD"
+    Write-ControllerLog "$($Server.Name) está comprobando actualizaciones."
+    $updater = Start-Process -FilePath "powershell.exe" `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$($Server.UpdateScript)`"") `
+        -WorkingDirectory $Server.Root `
+        -WindowStyle Hidden `
+        -PassThru
+
+    while (-not $updater.WaitForExit(5000)) {
+        Write-ServerStatus -ServerId $Server.Id -Status "updating" -Message "Actualizando servidor con SteamCMD"
+    }
+    $updater.Refresh()
+    if ($updater.ExitCode -ne 0) {
+        throw "SteamCMD no pudo actualizar $($Server.Name) (código $($updater.ExitCode))."
+    }
+    Write-ControllerLog "$($Server.Name) actualizado y listo para iniciar."
+}
+
+function Stop-ManagedServer {
+    param([Parameter(Mandatory)]$Server)
+
+    $processes = Get-ServerProcesses -Server $Server
     if ($processes.Count -eq 0) {
-        Write-ServerStatus -Status "stopped"
+        Write-ServerStatus
         return
     }
 
-    Write-ServerStatus -Status "stopping" -Message "Deteniendo servidor y guardando la partida"
+    Write-ServerStatus -ServerId $Server.Id -Status "stopping" -Message "Deteniendo servidor y guardando la partida"
 
     $closeRequested = $false
     foreach ($process in $processes) {
@@ -188,27 +272,29 @@ function Stop-Windrose {
         }
     }
 
-    if ($closeRequested -and (Wait-ForWindroseState -Running $false -TimeoutSeconds 30)) {
-        Write-ControllerLog "Windrose detenido correctamente desde el dashboard."
-        Write-ServerStatus -Status "stopped"
+    if ($closeRequested -and (Wait-ForServerState -Server $Server -Running $false -TimeoutSeconds 30)) {
+        Write-ControllerLog "$($Server.Name) detenido correctamente desde el dashboard."
+        Update-ManagedServer -Server $Server
+        Write-ServerStatus
         return
     }
 
-    foreach ($process in (Get-WindroseProcesses)) {
+    foreach ($process in (Get-ServerProcesses -Server $Server)) {
         [void][ConsoleSignal]::TrySendCtrlC([uint32]$process.Id)
     }
 
-    if (-not (Wait-ForWindroseState -Running $false -TimeoutSeconds 10)) {
-        foreach ($process in (Get-WindroseProcesses)) {
+    if (-not (Wait-ForServerState -Server $Server -Running $false -TimeoutSeconds 10)) {
+        foreach ($process in (Get-ServerProcesses -Server $Server)) {
             Stop-Process -Id $process.Id -Force
         }
-        Write-ControllerLog "Windrose requirió cierre forzado tras agotar el cierre normal."
+        Write-ControllerLog "$($Server.Name) requirió cierre forzado tras agotar el cierre normal."
     }
     else {
-        Write-ControllerLog "Windrose detenido correctamente desde el dashboard."
+        Write-ControllerLog "$($Server.Name) detenido correctamente desde el dashboard."
     }
 
-    Write-ServerStatus -Status "stopped"
+    Update-ManagedServer -Server $Server
+    Write-ServerStatus
 }
 
 function Invoke-ServerCommand {
@@ -216,20 +302,21 @@ function Invoke-ServerCommand {
 
     try {
         $command = Get-Content -LiteralPath $CommandFile.FullName -Raw | ConvertFrom-Json
-        if ($command.version -ne 1 -or $command.serverId -ne "windrose" -or $command.enabled -isnot [bool]) {
+        if ($command.version -ne 1 -or -not $ServerById.ContainsKey([string]$command.serverId) -or $command.enabled -isnot [bool]) {
             throw "Orden no válida o servidor no permitido."
         }
 
+        $server = $ServerById[[string]$command.serverId]
         if ($command.enabled) {
-            Start-Windrose
+            Start-ManagedServer -Server $server
         }
         else {
-            Stop-Windrose
+            Stop-ManagedServer -Server $server
         }
     }
     catch {
         Write-ControllerLog "Error procesando $($CommandFile.Name): $($_.Exception.Message)"
-        Write-ServerStatus -Status "error" -Message $_.Exception.Message
+        Write-ServerStatus -ServerId ([string]$command.serverId) -Status "error" -Message $_.Exception.Message
     }
     finally {
         Remove-Item -LiteralPath $CommandFile.FullName -Force -ErrorAction SilentlyContinue
@@ -237,7 +324,7 @@ function Invoke-ServerCommand {
 }
 
 Write-ControllerLog "Controlador iniciado."
-Write-ServerStatus -Status "stopped"
+Write-ServerStatus
 
 $watcher = [System.IO.FileSystemWatcher]::new($CommandsPath)
 $watcher.NotifyFilter =
@@ -252,7 +339,7 @@ try {
             $commandFiles | ForEach-Object { Invoke-ServerCommand -CommandFile $_ }
         }
         else {
-            Write-ServerStatus -Status "stopped"
+            Write-ServerStatus
         }
         [void]$watcher.WaitForChanged(
             [System.IO.WatcherChangeTypes]::Created -bor
